@@ -1,0 +1,80 @@
+[
+  {
+    "date": "2025-04-04",
+    "category": "교통비",
+    "amount": 1100.0,
+    "currency": "JPY",
+    "payment_method": "현금",
+    "krw_amount": 10450,
+    "description": "アパホテル＆リゾート博多駅",
+    "payer": "공훈의",
+    "receipt_image": "2f4558f2-859e-441c-957c-c5207e4768b0_IMG_3078.jpg",
+    "created_at": "2026-01-18T08:47:18.262087",
+    "_id": "98f6bd8c-446c-45bb-ad71-375956e0fd03"
+  },
+  {
+    "date": "2025-04-11",
+    "category": "교통비",
+    "amount": 6895.0,
+    "currency": "JPY",
+    "payment_method": "신용카드",
+    "krw_amount": 67140,
+    "description": "ENEOS セルフ福岡空港店",
+    "payer": "공훈의",
+    "receipt_image": "7ca3263f-9310-4424-97d0-eae02a0aec9b_IMG_3080.jpg",
+    "created_at": "2026-01-18T08:54:12.046128",
+    "_id": "d6abdfa6-6de5-476a-bbcb-271d0cc7437e"
+  },
+  {
+    "date": "2025-04-10",
+    "category": "기타",
+    "amount": 8300.0,
+    "currency": "JPY",
+    "payment_method": "신용카드",
+    "krw_amount": 80821,
+    "description": "福岡空港DF550",
+    "payer": "공훈의",
+    "receipt_image": "6c973b32-0a93-4a8d-ae7a-b1d42c176ec2_IMG_3079.jpg",
+    "created_at": "2026-01-18T08:57:36.865717",
+    "_id": "d217d780-3a77-4656-a715-738165eab1c0"
+  },
+  {
+    "date": "2025-04-09",
+    "category": "숙박비",
+    "amount": 36500.0,
+    "currency": "JPY",
+    "payment_method": "신용카드",
+    "krw_amount": 355419,
+    "description": "우메노하나 온센 숙박비",
+    "payer": "공훈의",
+    "receipt_image": "7a755d6c-8c0c-4db2-8e59-e610679cb8f9_IMG_3084.jpg",
+    "created_at": "2026-01-18T09:12:16.004909",
+    "_id": "6abbe8a4-fd9c-4c88-86e5-bb0da6c37891"
+  },
+  {
+    "date": "2025-04-09",
+    "category": "식사비",
+    "amount": 36500.0,
+    "currency": "JPY",
+    "payment_method": "신용카드",
+    "krw_amount": 355419,
+    "description": "梅の花 (福岡県久留米市天神町146)",
+    "payer": "공훈의",
+    "receipt_image": "88b85283-43e5-4b75-9bdd-80211e7611e3_IMG_3083.jpg",
+    "created_at": "2026-01-18T09:13:02.107877",
+    "_id": "e809a43e-1af3-4bbc-8b3c-7dc6ad21991e"
+  },
+  {
+    "date": "2025-04-09",
+    "category": "기타",
+    "amount": 9919.0,
+    "currency": "JPY",
+    "payment_method": "신용카드",
+    "krw_amount": 96586,
+    "description": "セントラル福岡ゴルフ倶楽部",
+    "payer": "공훈의",
+    "receipt_image": "dc72b5aa-a3e5-4942-99d1-267dc425b980_IMG_3082.jpg",
+    "created_at": "2026-01-18T09:14:01.606766",
+    "_id": "306d3123-762c-46fc-a9d5-f13f0354cd7d"
+  }
+]
