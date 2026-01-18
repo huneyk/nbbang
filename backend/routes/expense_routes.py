@@ -3,7 +3,7 @@ import io
 import uuid
 import logging
 from datetime import datetime
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify, make_response
 from werkzeug.utils import secure_filename
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
@@ -463,11 +463,11 @@ def download_report():
     output.seek(0)
     
     # 파일명 생성
-    filename = f"여행경비_리포트_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    filename = f"expense_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     
-    return send_file(
-        output,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True,
-        download_name=filename
-    )
+    # Response 생성
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+    
+    return response

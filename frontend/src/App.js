@@ -224,19 +224,36 @@ function App() {
   };
 
   // 리포트 다운로드
-  const handleDownloadReport = () => {
-    // iframe을 사용한 안정적인 파일 다운로드
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = `${API_BASE}/api/report/download`;
-    document.body.appendChild(iframe);
-    
-    // 3초 후 iframe 제거
-    setTimeout(() => {
-      document.body.removeChild(iframe);
-    }, 3000);
-    
-    showToast('리포트 다운로드가 시작되었습니다!');
+  const handleDownloadReport = async () => {
+    try {
+      setLoading(true);
+      
+      const response = await fetch(`${API_BASE}/api/report/download`);
+      const blob = await response.blob();
+      
+      // 파일명 생성
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0,10).replace(/-/g, '');
+      const timeStr = now.toTimeString().slice(0,8).replace(/:/g, '');
+      const filename = `expense_${dateStr}_${timeStr}.xlsx`;
+      
+      // 다운로드 링크 생성
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      showToast('리포트가 다운로드되었습니다!');
+    } catch (error) {
+      console.error('리포트 다운로드 오류:', error);
+      showToast('리포트 다운로드에 실패했습니다.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -500,9 +517,9 @@ function App() {
           <button 
             className="btn btn-download" 
             onClick={handleDownloadReport}
-            disabled={expenses.length === 0}
+            disabled={loading || expenses.length === 0}
           >
-            📥 경비 리포트 다운로드 (Excel)
+            {loading ? '다운로드 중...' : '📥 경비 리포트 다운로드 (Excel)'}
           </button>
         </div>
         <div className="summary-grid">
