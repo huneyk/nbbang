@@ -14,6 +14,8 @@ class Expense:
         description: str,
         payer: str,
         receipt_image: Optional[str] = None,
+        is_personal_expense: bool = False,
+        personal_expense_for: Optional[str] = None,
         created_at: Optional[datetime] = None,
         _id: Optional[ObjectId] = None
     ):
@@ -27,6 +29,8 @@ class Expense:
         self.description = description
         self.payer = payer
         self.receipt_image = receipt_image
+        self.is_personal_expense = is_personal_expense
+        self.personal_expense_for = personal_expense_for
         self.created_at = created_at or datetime.utcnow()
     
     def to_dict(self) -> dict:
@@ -40,6 +44,8 @@ class Expense:
             'description': self.description,
             'payer': self.payer,
             'receipt_image': self.receipt_image,
+            'is_personal_expense': self.is_personal_expense,
+            'personal_expense_for': self.personal_expense_for,
             'created_at': self.created_at
         }
         if self._id:
@@ -59,5 +65,7 @@ class Expense:
             description=data.get('description', ''),
             payer=data.get('payer', ''),
             receipt_image=data.get('receipt_image'),
+            is_personal_expense=data.get('is_personal_expense', False),
+            personal_expense_for=data.get('personal_expense_for'),
             created_at=data.get('created_at')
         )

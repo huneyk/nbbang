@@ -35,7 +35,8 @@ def create_app():
     # Health check
     @app.route('/api/health')
     def health_check():
-        api_key_set = bool(Config.OPENAI_API_KEY)
+        from services.ocr_service import get_openai_api_key
+        api_key_set = bool(get_openai_api_key())
         return {
             'status': 'ok', 
             'message': '여행 경비 정산 API 서버가 실행 중입니다.',

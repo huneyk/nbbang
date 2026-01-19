@@ -11,7 +11,10 @@ from openpyxl.utils import get_column_letter
 from config import Config
 from models.expense import Expense
 from services.ocr_service import analyze_receipt_with_gpt, calculate_krw_amount
-from services.database import get_database
+from services.database import (
+    get_database, load_settings, save_settings,
+    list_trips, archive_current_trip, create_new_trip, load_trip, delete_trip
+)
 from services.image_service import resize_image, get_image_info
 
 logger = logging.getLogger(__name__)
@@ -112,6 +115,14 @@ def create_expense():
         if field not in data:
             return jsonify({'success': False, 'error': f'{field} 필드가 필요합니다.'}), 400
     
+    # 개인 지출 여부 확인
+    is_personal_expense = data.get('is_personal_expense', False)
+    personal_expense_for = data.get('personal_expense_for') if is_personal_expense else None
+    
+    # 개인 지출인 경우 해당자 필수 검증
+    if is_personal_expense and not personal_expense_for:
+        return jsonify({'success': False, 'error': '개인 지출 해당자를 선택해주세요.'}), 400
+    
     # 원화 환산액 계산
     krw_amount = calculate_krw_amount(
         float(data['amount']),
@@ -128,7 +139,9 @@ def create_expense():
         krw_amount=krw_amount,
         description=data.get('description', ''),
         payer=data['payer'],
-        receipt_image=data.get('receipt_image')
+        receipt_image=data.get('receipt_image'),
+        is_personal_expense=is_personal_expense,
+        personal_expense_for=personal_expense_for
     )
     
     db = get_database()
@@ -163,34 +176,85 @@ def get_summary():
     """경비 요약 및 분담금을 계산합니다."""
     db = get_database()
     expenses = list(db.expenses.find())
+    settings = load_settings()
     
-    # 총 비용
+    participants = settings.get('participants', [])
+    categories = settings.get('categories', [])
+    
+    # 공동 경비와 개인 지출 분리
+    shared_expenses = [exp for exp in expenses if not exp.get('is_personal_expense', False)]
+    personal_expenses = [exp for exp in expenses if exp.get('is_personal_expense', False)]
+    
+    # 총 비용 (전체: 공동 + 개인)
     total_krw = sum(exp.get('krw_amount', 0) for exp in expenses)
     
-    # 참가자별 지불액
-    payer_totals = {payer: 0 for payer in Config.PARTICIPANTS}
-    for exp in expenses:
+    # 공동 경비 총액 (1인당 분담 계산용)
+    shared_total_krw = sum(exp.get('krw_amount', 0) for exp in shared_expenses)
+    
+    # 개인 지출 총액
+    personal_total_krw = sum(exp.get('krw_amount', 0) for exp in personal_expenses)
+    
+    # 참가자별 지불액 (공동 경비만)
+    payer_totals = {payer: 0 for payer in participants}
+    for exp in shared_expenses:
         payer = exp.get('payer', '')
         if payer in payer_totals:
             payer_totals[payer] += exp.get('krw_amount', 0)
     
-    # 1인당 분담액
-    num_participants = len(Config.PARTICIPANTS)
-    per_person = round(total_krw / num_participants) if num_participants > 0 else 0
+    # 참가자별 개인 지출 (다른 사람이 대신 결제해준 개인 지출)
+    personal_expense_totals = {person: 0 for person in participants}
+    personal_expense_details = {person: [] for person in participants}
+    
+    for exp in personal_expenses:
+        person_for = exp.get('personal_expense_for', '')
+        if person_for in personal_expense_totals:
+            personal_expense_totals[person_for] += exp.get('krw_amount', 0)
+            personal_expense_details[person_for].append({
+                'date': exp.get('date', ''),
+                'description': exp.get('description', ''),
+                'amount': exp.get('krw_amount', 0),
+                'payer': exp.get('payer', ''),
+                'category': exp.get('category', '')
+            })
+    
+    # 참가자별 개인 지출을 대신 결제해준 금액
+    paid_for_others = {payer: 0 for payer in participants}
+    for exp in personal_expenses:
+        payer = exp.get('payer', '')
+        if payer in paid_for_others:
+            paid_for_others[payer] += exp.get('krw_amount', 0)
+    
+    # 1인당 분담액 (공동 경비만 기준)
+    num_participants = len(participants)
+    per_person = round(shared_total_krw / num_participants) if num_participants > 0 else 0
     
     # 정산 내역 (누가 얼마를 받거나 내야 하는지)
+    # 공동 경비 정산 + 개인 지출 정산
     settlements = {}
-    for payer, paid in payer_totals.items():
-        diff = per_person - paid  # 부호 반전: 1인당 분담액 - 지불한 금액
+    for payer in participants:
+        paid = payer_totals[payer]  # 공동 경비 지불액
+        paid_for_other = paid_for_others[payer]  # 다른 사람 개인 지출 대신 결제액
+        personal_expense = personal_expense_totals[payer]  # 본인 개인 지출 총액
+        
+        # 공동 경비 기준 차액
+        shared_diff = per_person - paid
+        
+        # 최종 정산액 = 공동 경비 정산 + 개인 지출 - 대신 결제해준 금액
+        final_diff = shared_diff + personal_expense - paid_for_other
+        
         settlements[payer] = {
-            'paid': round(paid),
-            'should_pay': per_person,
-            'difference': round(diff),
-            'status': '내야 할 금액' if diff > 0 else ('받을 금액' if diff < 0 else '정산 완료')
+            'paid': round(paid),  # 공동 경비 지불액
+            'paid_for_others': round(paid_for_other),  # 타인 개인 지출 대신 결제액
+            'should_pay': per_person,  # 1인당 공동 경비 분담액
+            'personal_expense': round(personal_expense),  # 본인 개인 지출 총액
+            'personal_expense_details': personal_expense_details[payer],  # 개인 지출 상세
+            'shared_difference': round(shared_diff),  # 공동 경비 정산액
+            'difference': round(final_diff),  # 최종 정산액
+            'status': '내야 할 금액' if final_diff > 0 else ('받을 금액' if final_diff < 0 else '정산 완료')
         }
     
-    # 카테고리별 지출
-    category_totals = {cat: 0 for cat in Config.EXPENSE_CATEGORIES}
+    # 카테고리별 지출 (전체)
+    category_totals = {cat: 0 for cat in categories}
     for exp in expenses:
         category = exp.get('category', '기타')
         if category in category_totals:
@@ -200,12 +264,16 @@ def get_summary():
         'success': True,
         'data': {
             'total_krw': round(total_krw),
+            'shared_total_krw': round(shared_total_krw),
+            'personal_total_krw': round(personal_total_krw),
             'per_person': per_person,
             'num_participants': num_participants,
             'payer_totals': {k: round(v) for k, v in payer_totals.items()},
             'settlements': settlements,
             'category_totals': {k: round(v) for k, v in category_totals.items()},
-            'expense_count': len(expenses)
+            'expense_count': len(expenses),
+            'shared_expense_count': len(shared_expenses),
+            'personal_expense_count': len(personal_expenses)
         }
     })
 
@@ -213,13 +281,21 @@ def get_summary():
 @expense_bp.route('/api/config', methods=['GET'])
 def get_config():
     """설정 정보를 반환합니다."""
+    settings = load_settings()
+    currencies = settings.get('currencies', [
+        {'code': 'KRW', 'name': '원', 'flag': '🇰🇷', 'rate': 1.0, 'is_base': True},
+        {'code': 'JPY', 'name': '엔', 'flag': '🇯🇵', 'rate': 9.5, 'is_base': False},
+        {'code': 'USD', 'name': '달러', 'flag': '🇺🇸', 'rate': 1350.0, 'is_base': False}
+    ])
     return jsonify({
         'success': True,
         'data': {
-            'participants': Config.PARTICIPANTS,
-            'categories': Config.EXPENSE_CATEGORIES,
-            'exchange_rates': Config.EXCHANGE_RATES,
-            'credit_card_fee_rate': Config.CREDIT_CARD_FEE_RATE
+            'trip_title': settings.get('trip_title', '여행 경비 정산'),
+            'participants': settings.get('participants', []),
+            'categories': settings.get('categories', []),
+            'currencies': currencies,
+            'exchange_rates': settings.get('exchange_rates', {'KRW': 1.0, 'JPY': 9.5, 'USD': 1350.0}),
+            'credit_card_fee_rate': settings.get('credit_card_fee_rate', 2.5)
         }
     })
 
@@ -228,15 +304,316 @@ def get_config():
 def update_exchange_rates():
     """환율을 업데이트합니다."""
     data = request.json
+    settings = load_settings()
     
-    if 'JPY' in data:
-        Config.EXCHANGE_RATES['JPY'] = float(data['JPY'])
-    if 'USD' in data:
-        Config.EXCHANGE_RATES['USD'] = float(data['USD'])
+    exchange_rates = settings.get('exchange_rates', {'KRW': 1.0, 'JPY': 9.5, 'USD': 1350.0})
+    currencies = settings.get('currencies', [])
+    
+    # 개별 통화 환율 업데이트
+    for currency_code, rate in data.items():
+        exchange_rates[currency_code] = float(rate)
+        Config.EXCHANGE_RATES[currency_code] = float(rate)
+        # currencies 배열도 동기화
+        for curr in currencies:
+            if curr['code'] == currency_code:
+                curr['rate'] = float(rate)
+                break
+    
+    settings['exchange_rates'] = exchange_rates
+    settings['currencies'] = currencies
+    save_settings(settings)
     
     return jsonify({
         'success': True,
-        'data': Config.EXCHANGE_RATES
+        'data': exchange_rates
+    })
+
+
+# ===== 통화 관리 API =====
+
+@expense_bp.route('/api/currencies', methods=['GET'])
+def get_currencies():
+    """모든 통화 목록을 반환합니다."""
+    settings = load_settings()
+    currencies = settings.get('currencies', [
+        {'code': 'KRW', 'name': '원', 'flag': '🇰🇷', 'rate': 1.0, 'is_base': True},
+        {'code': 'JPY', 'name': '엔', 'flag': '🇯🇵', 'rate': 9.5, 'is_base': False},
+        {'code': 'USD', 'name': '달러', 'flag': '🇺🇸', 'rate': 1350.0, 'is_base': False}
+    ])
+    
+    return jsonify({
+        'success': True,
+        'data': currencies
+    })
+
+
+@expense_bp.route('/api/currencies', methods=['POST'])
+def add_currency():
+    """새 통화를 추가합니다."""
+    data = request.json
+    
+    # 필수 필드 검증
+    if not data.get('code') or not data.get('name'):
+        return jsonify({'success': False, 'error': '통화 코드와 이름은 필수입니다.'}), 400
+    
+    code = data['code'].upper().strip()
+    name = data['name'].strip()
+    flag = data.get('flag', '🏳️').strip()
+    rate = float(data.get('rate', 1.0))
+    
+    settings = load_settings()
+    currencies = settings.get('currencies', [])
+    exchange_rates = settings.get('exchange_rates', {'KRW': 1.0})
+    
+    # 중복 검사
+    if any(c['code'] == code for c in currencies):
+        return jsonify({'success': False, 'error': f'통화 코드 {code}가 이미 존재합니다.'}), 400
+    
+    # 새 통화 추가
+    new_currency = {
+        'code': code,
+        'name': name,
+        'flag': flag,
+        'rate': rate,
+        'is_base': False
+    }
+    currencies.append(new_currency)
+    
+    # exchange_rates도 동기화
+    exchange_rates[code] = rate
+    Config.EXCHANGE_RATES[code] = rate
+    
+    settings['currencies'] = currencies
+    settings['exchange_rates'] = exchange_rates
+    save_settings(settings)
+    
+    return jsonify({
+        'success': True,
+        'data': new_currency
+    }), 201
+
+
+@expense_bp.route('/api/currencies/<currency_code>', methods=['PUT'])
+def update_currency(currency_code: str):
+    """통화 정보를 수정합니다."""
+    data = request.json
+    settings = load_settings()
+    currencies = settings.get('currencies', [])
+    exchange_rates = settings.get('exchange_rates', {})
+    
+    # 통화 찾기
+    currency = None
+    for c in currencies:
+        if c['code'] == currency_code.upper():
+            currency = c
+            break
+    
+    if not currency:
+        return jsonify({'success': False, 'error': '통화를 찾을 수 없습니다.'}), 404
+    
+    # 기준 통화(KRW) 환율은 변경 불가
+    if currency.get('is_base') and 'rate' in data and float(data['rate']) != 1.0:
+        return jsonify({'success': False, 'error': '기준 통화의 환율은 변경할 수 없습니다.'}), 400
+    
+    # 업데이트
+    if 'name' in data:
+        currency['name'] = data['name'].strip()
+    if 'flag' in data:
+        currency['flag'] = data['flag'].strip()
+    if 'rate' in data and not currency.get('is_base'):
+        currency['rate'] = float(data['rate'])
+        exchange_rates[currency_code.upper()] = float(data['rate'])
+        Config.EXCHANGE_RATES[currency_code.upper()] = float(data['rate'])
+    
+    settings['currencies'] = currencies
+    settings['exchange_rates'] = exchange_rates
+    save_settings(settings)
+    
+    return jsonify({
+        'success': True,
+        'data': currency
+    })
+
+
+@expense_bp.route('/api/currencies/<currency_code>', methods=['DELETE'])
+def delete_currency(currency_code: str):
+    """통화를 삭제합니다."""
+    settings = load_settings()
+    currencies = settings.get('currencies', [])
+    exchange_rates = settings.get('exchange_rates', {})
+    
+    # 통화 찾기
+    currency = None
+    for c in currencies:
+        if c['code'] == currency_code.upper():
+            currency = c
+            break
+    
+    if not currency:
+        return jsonify({'success': False, 'error': '통화를 찾을 수 없습니다.'}), 404
+    
+    # 기준 통화는 삭제 불가
+    if currency.get('is_base'):
+        return jsonify({'success': False, 'error': '기준 통화는 삭제할 수 없습니다.'}), 400
+    
+    # 삭제
+    currencies = [c for c in currencies if c['code'] != currency_code.upper()]
+    
+    # exchange_rates에서도 삭제
+    if currency_code.upper() in exchange_rates:
+        del exchange_rates[currency_code.upper()]
+    if currency_code.upper() in Config.EXCHANGE_RATES:
+        del Config.EXCHANGE_RATES[currency_code.upper()]
+    
+    settings['currencies'] = currencies
+    settings['exchange_rates'] = exchange_rates
+    save_settings(settings)
+    
+    return jsonify({
+        'success': True,
+        'message': f'{currency_code} 통화가 삭제되었습니다.'
+    })
+
+
+@expense_bp.route('/api/settings', methods=['GET'])
+def get_settings():
+    """전체 설정을 반환합니다."""
+    settings = load_settings()
+    return jsonify({
+        'success': True,
+        'data': settings
+    })
+
+
+@expense_bp.route('/api/settings', methods=['PUT'])
+def update_settings():
+    """전체 설정을 업데이트합니다."""
+    data = request.json
+    settings = load_settings()
+    
+    # 업데이트 가능한 필드들
+    if 'trip_title' in data:
+        settings['trip_title'] = data['trip_title']
+    
+    if 'participants' in data:
+        # 빈 문자열 제거 및 공백 정리
+        participants = [p.strip() for p in data['participants'] if p.strip()]
+        settings['participants'] = participants
+    
+    if 'categories' in data:
+        # 빈 문자열 제거 및 공백 정리
+        categories = [c.strip() for c in data['categories'] if c.strip()]
+        settings['categories'] = categories
+    
+    if 'credit_card_fee_rate' in data:
+        settings['credit_card_fee_rate'] = float(data['credit_card_fee_rate'])
+        # Config도 업데이트 (런타임에서 사용)
+        Config.CREDIT_CARD_FEE_RATE = float(data['credit_card_fee_rate']) / 100.0
+    
+    if 'openai_api_key' in data:
+        settings['openai_api_key'] = data['openai_api_key']
+        # Config도 업데이트 (런타임에서 사용)
+        Config.OPENAI_API_KEY = data['openai_api_key']
+    
+    if 'currencies' in data:
+        settings['currencies'] = data['currencies']
+        # exchange_rates도 동기화
+        exchange_rates = {}
+        for curr in data['currencies']:
+            exchange_rates[curr['code']] = float(curr['rate'])
+            Config.EXCHANGE_RATES[curr['code']] = float(curr['rate'])
+        settings['exchange_rates'] = exchange_rates
+    elif 'exchange_rates' in data:
+        settings['exchange_rates'] = data['exchange_rates']
+        # Config도 업데이트
+        for currency, rate in data['exchange_rates'].items():
+            Config.EXCHANGE_RATES[currency] = float(rate)
+    
+    save_settings(settings)
+    
+    return jsonify({
+        'success': True,
+        'data': settings
+    })
+
+
+# ===== 여행 관리 API =====
+
+@expense_bp.route('/api/trips', methods=['GET'])
+def get_trips():
+    """저장된 모든 여행 목록을 반환합니다."""
+    trips = list_trips()
+    return jsonify({
+        'success': True,
+        'data': trips
+    })
+
+
+@expense_bp.route('/api/trips/new', methods=['POST'])
+def create_trip():
+    """새로운 여행을 생성합니다. 현재 여행은 아카이브됩니다."""
+    data = request.json
+    
+    new_title = data.get('trip_title', '새 여행')
+    participants = data.get('participants', [])
+    categories = data.get('categories', [])
+    credit_card_fee_rate = data.get('credit_card_fee_rate', 2.5)
+    
+    # 현재 여행 아카이브
+    archived_id = archive_current_trip()
+    
+    # 새 여행 생성
+    new_settings = create_new_trip(
+        new_title=new_title,
+        participants=participants if participants else None,
+        categories=categories if categories else None,
+        credit_card_fee_rate=credit_card_fee_rate
+    )
+    
+    return jsonify({
+        'success': True,
+        'data': {
+            'archived_trip_id': archived_id,
+            'new_settings': new_settings
+        }
+    }), 201
+
+
+@expense_bp.route('/api/trips/<trip_id>', methods=['GET'])
+def get_trip(trip_id: str):
+    """특정 여행을 불러옵니다."""
+    # 현재 여행 먼저 아카이브
+    archive_current_trip()
+    
+    # 선택한 여행 불러오기
+    result = load_trip(trip_id)
+    
+    if not result:
+        return jsonify({
+            'success': False,
+            'error': '여행을 찾을 수 없습니다.'
+        }), 404
+    
+    return jsonify({
+        'success': True,
+        'data': result
+    })
+
+
+@expense_bp.route('/api/trips/<trip_id>', methods=['DELETE'])
+def remove_trip(trip_id: str):
+    """아카이브된 여행을 삭제합니다."""
+    success = delete_trip(trip_id)
+    
+    if not success:
+        return jsonify({
+            'success': False,
+            'error': '여행을 찾을 수 없습니다.'
+        }), 404
+    
+    return jsonify({
+        'success': True,
+        'message': '여행이 삭제되었습니다.'
     })
 
 
@@ -245,30 +622,63 @@ def download_report():
     """경비 리포트를 Excel 파일로 다운로드합니다."""
     db = get_database()
     expenses = list(db.expenses.find().sort('date', 1))
+    settings = load_settings()
+    
+    participants = settings.get('participants', [])
+    categories = settings.get('categories', [])
+    trip_title = settings.get('trip_title', '여행 경비 정산')
+    
+    # 공동 경비와 개인 지출 분리
+    shared_expenses = [exp for exp in expenses if not exp.get('is_personal_expense', False)]
+    personal_expenses = [exp for exp in expenses if exp.get('is_personal_expense', False)]
     
     # 요약 데이터 계산
     total_krw = sum(exp.get('krw_amount', 0) for exp in expenses)
+    shared_total_krw = sum(exp.get('krw_amount', 0) for exp in shared_expenses)
+    personal_total_krw = sum(exp.get('krw_amount', 0) for exp in personal_expenses)
     
-    payer_totals = {payer: 0 for payer in Config.PARTICIPANTS}
-    for exp in expenses:
+    # 참가자별 지불액 (공동 경비만)
+    payer_totals = {payer: 0 for payer in participants}
+    for exp in shared_expenses:
         payer = exp.get('payer', '')
         if payer in payer_totals:
             payer_totals[payer] += exp.get('krw_amount', 0)
     
-    num_participants = len(Config.PARTICIPANTS)
-    per_person = round(total_krw / num_participants) if num_participants > 0 else 0
+    # 참가자별 개인 지출
+    personal_expense_totals = {person: 0 for person in participants}
+    for exp in personal_expenses:
+        person_for = exp.get('personal_expense_for', '')
+        if person_for in personal_expense_totals:
+            personal_expense_totals[person_for] += exp.get('krw_amount', 0)
+    
+    # 참가자별 타인 개인지출 대납액
+    paid_for_others = {payer: 0 for payer in participants}
+    for exp in personal_expenses:
+        payer = exp.get('payer', '')
+        if payer in paid_for_others:
+            paid_for_others[payer] += exp.get('krw_amount', 0)
+    
+    num_participants = len(participants)
+    per_person = round(shared_total_krw / num_participants) if num_participants > 0 else 0
     
     settlements = {}
-    for payer, paid in payer_totals.items():
-        diff = paid - per_person
+    for payer in participants:
+        paid = payer_totals[payer]
+        paid_for_other = paid_for_others[payer]
+        personal_expense = personal_expense_totals[payer]
+        shared_diff = per_person - paid
+        final_diff = shared_diff + personal_expense - paid_for_other
+        
         settlements[payer] = {
             'paid': round(paid),
+            'paid_for_others': round(paid_for_other),
             'should_pay': per_person,
-            'difference': round(diff),
-            'status': '받을 금액' if diff > 0 else ('내야 할 금액' if diff < 0 else '정산 완료')
+            'personal_expense': round(personal_expense),
+            'difference': round(final_diff),
+            'status': '내야 할 금액' if final_diff > 0 else ('받을 금액' if final_diff < 0 else '정산 완료')
         }
     
-    category_totals = {cat: 0 for cat in Config.EXPENSE_CATEGORIES}
+    category_totals = {cat: 0 for cat in categories}
     for exp in expenses:
         category = exp.get('category', '기타')
         if category in category_totals:
@@ -280,6 +690,7 @@ def download_report():
     # 스타일 정의
     header_font = Font(bold=True, size=12, color='FFFFFF')
     header_fill = PatternFill(start_color='1a1a2e', end_color='1a1a2e', fill_type='solid')
+    personal_fill = PatternFill(start_color='fff0f0', end_color='fff0f0', fill_type='solid')
     title_font = Font(bold=True, size=14, color='e94560')
     currency_font = Font(name='Consolas', size=11)
     border = Border(
@@ -296,21 +707,21 @@ def download_report():
     ws_expenses.title = "경비 내역"
     
     # 제목
-    ws_expenses.merge_cells('A1:H1')
-    ws_expenses['A1'] = '🌏 여행 경비 내역서'
+    ws_expenses.merge_cells('A1:I1')
+    ws_expenses['A1'] = f'🌏 {trip_title} - 경비 내역서'
     ws_expenses['A1'].font = Font(bold=True, size=18, color='e94560')
     ws_expenses['A1'].alignment = center_align
     ws_expenses.row_dimensions[1].height = 35
     
     # 생성 날짜
-    ws_expenses.merge_cells('A2:H2')
+    ws_expenses.merge_cells('A2:I2')
     ws_expenses['A2'] = f"생성일: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     ws_expenses['A2'].alignment = center_align
     ws_expenses['A2'].font = Font(size=10, color='666666')
     ws_expenses.row_dimensions[2].height = 20
     
     # 헤더 행
-    headers = ['날짜', '지출 항목', '금액', '통화', '결제수단', '원화 환산액', '세부 내역', '지불한 사람']
+    headers = ['날짜', '지출 항목', '금액', '통화', '결제수단', '원화 환산액', '세부 내역', '지불한 사람', '지출 유형']
     for col, header in enumerate(headers, 1):
         cell = ws_expenses.cell(row=4, column=col, value=header)
         cell.font = header_font
@@ -321,6 +732,8 @@ def download_report():
     
     # 데이터 행
     for row, exp in enumerate(expenses, 5):
+        is_personal = exp.get('is_personal_expense', False)
+        
         ws_expenses.cell(row=row, column=1, value=exp.get('date', '')).border = border
         ws_expenses.cell(row=row, column=2, value=exp.get('category', '')).border = border
         
@@ -344,9 +757,20 @@ def download_report():
         
         ws_expenses.cell(row=row, column=7, value=exp.get('description', '')).border = border
         ws_expenses.cell(row=row, column=8, value=exp.get('payer', '')).border = border
+        
+        # 지출 유형
+        expense_type = f"개인 ({exp.get('personal_expense_for', '')})" if is_personal else "공동"
+        type_cell = ws_expenses.cell(row=row, column=9, value=expense_type)
+        type_cell.border = border
+        type_cell.alignment = center_align
+        if is_personal:
+            type_cell.font = Font(color='e94560')
+            # 개인 지출 행 배경색
+            for c in range(1, 10):
+                ws_expenses.cell(row=row, column=c).fill = personal_fill
     
     # 열 너비 조정
-    column_widths = [12, 12, 15, 8, 12, 18, 25, 12]
+    column_widths = [12, 12, 15, 8, 12, 18, 25, 12, 14]
     for i, width in enumerate(column_widths, 1):
         ws_expenses.column_dimensions[get_column_letter(i)].width = width
     
@@ -354,7 +778,7 @@ def download_report():
     ws_summary = wb.create_sheet(title="정산 요약")
     
     # 제목
-    ws_summary.merge_cells('A1:D1')
+    ws_summary.merge_cells('A1:F1')
     ws_summary['A1'] = '💰 경비 정산 요약'
     ws_summary['A1'].font = Font(bold=True, size=18, color='e94560')
     ws_summary['A1'].alignment = center_align
@@ -369,29 +793,47 @@ def download_report():
     ws_summary['C3'] = f"({len(expenses)}건)"
     ws_summary['C3'].font = Font(size=10, color='666666')
     
-    # 1인당 분담액
-    ws_summary['A4'] = '1인당 분담액'
+    # 공동 경비
+    ws_summary['A4'] = '공동 경비'
     ws_summary['A4'].font = Font(bold=True, size=12)
-    ws_summary['B4'] = per_person
-    ws_summary['B4'].font = Font(name='Consolas', size=14, bold=True, color='00d9a5')
+    ws_summary['B4'] = shared_total_krw
+    ws_summary['B4'].font = Font(name='Consolas', size=12, color='00d9a5')
     ws_summary['B4'].number_format = '₩#,##0'
-    ws_summary['C4'] = f"({num_participants}명 기준)"
+    ws_summary['C4'] = f"({len(shared_expenses)}건)"
     ws_summary['C4'].font = Font(size=10, color='666666')
     
-    # 정산 내역 헤더
-    ws_summary['A6'] = '💸 정산 내역'
-    ws_summary['A6'].font = Font(bold=True, size=14)
+    # 개인 지출
+    ws_summary['A5'] = '개인 지출'
+    ws_summary['A5'].font = Font(bold=True, size=12)
+    ws_summary['B5'] = personal_total_krw
+    ws_summary['B5'].font = Font(name='Consolas', size=12, color='e94560')
+    ws_summary['B5'].number_format = '₩#,##0'
+    ws_summary['C5'] = f"({len(personal_expenses)}건)"
+    ws_summary['C5'].font = Font(size=10, color='666666')
     
-    settlement_headers = ['이름', '지불한 금액', '분담액', '차액', '상태']
+    # 1인당 분담액
+    ws_summary['A6'] = '1인당 분담액 (공동 경비)'
+    ws_summary['A6'].font = Font(bold=True, size=12)
+    ws_summary['B6'] = per_person
+    ws_summary['B6'].font = Font(name='Consolas', size=14, bold=True, color='00d9a5')
+    ws_summary['B6'].number_format = '₩#,##0'
+    ws_summary['C6'] = f"({num_participants}명 기준)"
+    ws_summary['C6'].font = Font(size=10, color='666666')
+    
+    # 정산 내역 헤더
+    ws_summary['A8'] = '💸 정산 내역'
+    ws_summary['A8'].font = Font(bold=True, size=14)
+    
+    settlement_headers = ['이름', '공동 경비 지불', '타인 개인지출 대납', '분담액', '개인 지출', '최종 정산액', '상태']
     for col, header in enumerate(settlement_headers, 1):
-        cell = ws_summary.cell(row=7, column=col, value=header)
+        cell = ws_summary.cell(row=9, column=col, value=header)
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = center_align
         cell.border = border
     
     # 정산 데이터
-    row = 8
+    row = 10
     for name, data in settlements.items():
         ws_summary.cell(row=row, column=1, value=name).border = border
         
@@ -400,21 +842,33 @@ def download_report():
         paid_cell.alignment = right_align
         paid_cell.border = border
         
-        should_pay_cell = ws_summary.cell(row=row, column=3, value=data['should_pay'])
+        paid_for_others_cell = ws_summary.cell(row=row, column=3, value=data['paid_for_others'])
+        paid_for_others_cell.number_format = '₩#,##0'
+        paid_for_others_cell.alignment = right_align
+        paid_for_others_cell.border = border
+        
+        should_pay_cell = ws_summary.cell(row=row, column=4, value=data['should_pay'])
         should_pay_cell.number_format = '₩#,##0'
         should_pay_cell.alignment = right_align
         should_pay_cell.border = border
         
-        diff_cell = ws_summary.cell(row=row, column=4, value=data['difference'])
+        personal_cell = ws_summary.cell(row=row, column=5, value=data['personal_expense'])
+        personal_cell.number_format = '₩#,##0'
+        personal_cell.alignment = right_align
+        personal_cell.border = border
+        if data['personal_expense'] > 0:
+            personal_cell.font = Font(color='e94560')
+        
+        diff_cell = ws_summary.cell(row=row, column=6, value=data['difference'])
         diff_cell.number_format = '₩#,##0'
         diff_cell.alignment = right_align
         diff_cell.border = border
         if data['difference'] > 0:
-            diff_cell.font = Font(color='00d9a5', bold=True)
-        elif data['difference'] < 0:
             diff_cell.font = Font(color='e94560', bold=True)
+        elif data['difference'] < 0:
+            diff_cell.font = Font(color='00d9a5', bold=True)
         
-        status_cell = ws_summary.cell(row=row, column=5, value=data['status'])
+        status_cell = ws_summary.cell(row=row, column=7, value=data['status'])
         status_cell.alignment = center_align
         status_cell.border = border
         row += 1
@@ -451,11 +905,13 @@ def download_report():
             row += 1
     
     # 열 너비 조정
-    ws_summary.column_dimensions['A'].width = 15
+    ws_summary.column_dimensions['A'].width = 20
     ws_summary.column_dimensions['B'].width = 18
-    ws_summary.column_dimensions['C'].width = 15
+    ws_summary.column_dimensions['C'].width = 18
     ws_summary.column_dimensions['D'].width = 15
     ws_summary.column_dimensions['E'].width = 15
+    ws_summary.column_dimensions['F'].width = 15
+    ws_summary.column_dimensions['G'].width = 12
     
     # 메모리에 저장
     output = io.BytesIO()

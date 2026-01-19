@@ -12,6 +12,27 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
+def get_openai_api_key() -> str:
+    """
+    OpenAI API 키를 가져옵니다.
+    1. Config에서 먼저 확인 (환경변수 또는 런타임 설정)
+    2. 없으면 settings 파일에서 확인
+    """
+    if Config.OPENAI_API_KEY:
+        return Config.OPENAI_API_KEY
+    
+    # settings 파일에서 API 키 확인
+    from services.database import load_settings
+    settings = load_settings()
+    api_key = settings.get('openai_api_key', '')
+    
+    if api_key:
+        # Config에도 설정하여 다음 호출 시 빠르게 접근
+        Config.OPENAI_API_KEY = api_key
+    
+    return api_key
+
+
 def analyze_receipt_with_gpt(image_path: str) -> dict:
     """
     GPT-4 Vision을 사용하여 영수증을 분석합니다.
@@ -19,11 +40,13 @@ def analyze_receipt_with_gpt(image_path: str) -> dict:
     """
     logger.info(f"영수증 분석 시작: {image_path}")
     
-    if not Config.OPENAI_API_KEY:
+    api_key = get_openai_api_key()
+    
+    if not api_key:
         logger.error("OpenAI API 키가 설정되지 않았습니다.")
         return {
             'success': False,
-            'error': 'OpenAI API 키가 설정되지 않았습니다. backend/.env 파일에 OPENAI_API_KEY를 설정해주세요.',
+            'error': 'OpenAI API 키가 설정되지 않았습니다. 설정에서 OpenAI API Key를 입력해주세요.',
             'data': None
         }
     
@@ -36,7 +59,7 @@ def analyze_receipt_with_gpt(image_path: str) -> dict:
         extension = image_path.lower().split('.')[-1]
         mime_type = 'image/jpeg' if extension in ['jpg', 'jpeg'] else f'image/{extension}'
         
-        client = openai.OpenAI(api_key=Config.OPENAI_API_KEY)
+        client = openai.OpenAI(api_key=api_key)
         
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -215,13 +238,19 @@ JSON만 반환해주세요."""
 def calculate_krw_amount(amount: float, currency: str, payment_method: str) -> float:
     """
     원화 환산액을 계산합니다.
-    신용카드 결제 시 2.5% 수수료를 추가합니다.
+    신용카드 결제 시 설정된 수수료율을 추가합니다.
     """
-    exchange_rate = Config.EXCHANGE_RATES.get(currency, 1.0)
+    from services.database import load_settings
+    
+    settings = load_settings()
+    exchange_rates = settings.get('exchange_rates', Config.EXCHANGE_RATES)
+    credit_card_fee_rate = settings.get('credit_card_fee_rate', 2.5) / 100.0  # 퍼센트를 비율로 변환
+    
+    exchange_rate = exchange_rates.get(currency, 1.0)
     krw_amount = amount * exchange_rate
     
-    # 신용카드 결제 시 2.5% 수수료 추가
+    # 신용카드 결제 시 수수료 추가
     if payment_method == '신용카드':
-        krw_amount *= (1 + Config.CREDIT_CARD_FEE_RATE)
+        krw_amount *= (1 + credit_card_fee_rate)
     
     return round(krw_amount)
