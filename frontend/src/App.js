@@ -3,7 +3,10 @@ import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 import './App.css';
 
-const API_BASE = 'http://localhost:5001';
+// 데스크톱 앱에서는 상대 경로 사용, 개발 모드에서는 localhost 사용
+const API_BASE = process.env.REACT_APP_API_BASE !== undefined 
+  ? process.env.REACT_APP_API_BASE 
+  : 'http://localhost:5001';
 
 function App() {
   const [expenses, setExpenses] = useState([]);
