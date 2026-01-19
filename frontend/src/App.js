@@ -8,6 +8,9 @@ const API_BASE = process.env.REACT_APP_API_BASE !== undefined
   ? process.env.REACT_APP_API_BASE 
   : 'http://localhost:5001';
 
+// 최대 파일 크기 (50MB)
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
 function App() {
   const [expenses, setExpenses] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -149,8 +152,6 @@ function App() {
   };
 
   // 드롭존 설정
-  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-  
   const onDrop = useCallback(async (acceptedFiles, rejectedFiles) => {
     // 거부된 파일 처리
     if (rejectedFiles.length > 0) {

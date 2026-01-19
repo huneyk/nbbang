@@ -1,12 +1,7 @@
 {
   "trip_id": null,
-  "trip_title": "외교동기 10차 후쿠오카 여행_20260322",
-  "participants": [
-    "공훈의",
-    "강경수",
-    "최철기",
-    "이태수"
-  ],
+  "trip_title": "",
+  "participants": [],
   "categories": [
     "교통비",
     "식사비",
@@ -15,7 +10,7 @@
     "기타"
   ],
   "credit_card_fee_rate": 2.5,
-  "openai_api_key": "REMOVED_SECRET",
+  "openai_api_key": "",
   "currencies": [
     {
       "code": "KRW",
@@ -25,23 +20,23 @@
       "is_base": true
     },
     {
-      "code": "JPY",
-      "name": "엔",
-      "flag": "🇯🇵",
-      "rate": 9.5,
-      "is_base": false
-    },
-    {
       "code": "USD",
       "name": "달러",
       "flag": "🇺🇸",
       "rate": 1350.0,
       "is_base": false
+    },
+    {
+      "code": "JPY",
+      "name": "엔",
+      "flag": "🇯🇵",
+      "rate": 9.5,
+      "is_base": false
     }
   ],
   "exchange_rates": {
     "KRW": 1,
-    "JPY": 9.5,
-    "USD": 1350
+    "USD": 1350,
+    "JPY": 9.5
   }
 }
