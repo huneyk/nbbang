@@ -1471,6 +1471,24 @@ function App() {
         </div>
       )}
 
+      {/* 푸터 */}
+      <footer className="site-footer">
+        <div className="footer-content">
+          <div className="footer-left">
+            <img src="/asi_logo.png" alt="Advanced Society Initiative" className="footer-logo" />
+            <div className="footer-info">
+              <strong>고도화 사회 이니셔티브</strong>
+              <span>Advanced Society Initiative</span>
+              <span>대표자 : 공훈익 (huney.kong@gmail.com)</span>
+              <span>사업자 등록번호 : 310-29-01213</span>
+            </div>
+          </div>
+          <div className="footer-right">
+            <span>&copy; 2026 Advanced Society Initiative. All rights reserved.</span>
+          </div>
+        </div>
+      </footer>
+
       {/* 토스트 메시지 */}
       {toast && (
         <div className={`toast ${toast.type}`}>
