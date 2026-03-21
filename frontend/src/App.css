@@ -1552,18 +1552,22 @@ body {
   }
 
   .rate-item {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.5rem;
+    padding: 0.65rem 0.75rem;
   }
 
   .rate-item label {
     min-width: auto;
+    font-size: 0.82rem;
+    flex-shrink: 0;
   }
 
   .rate-item input {
     font-size: 16px;
-    max-width: none;
+    max-width: 110px;
     flex: 1;
+    min-width: 0;
   }
 
   .modal {
