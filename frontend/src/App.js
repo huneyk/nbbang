@@ -1479,7 +1479,6 @@ function App() {
             <div className="footer-info">
               <strong>고도화 사회 이니셔티브</strong>
               <span>Advanced Society Initiative</span>
-              <span>대표자 : 공훈익 (huney.kong@gmail.com)</span>
               <span>사업자 등록번호 : 310-29-01213</span>
             </div>
           </div>
