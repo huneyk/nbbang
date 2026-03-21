@@ -57,30 +57,60 @@ def analyze_receipt_with_gemini(image_path: str) -> dict:
         prompt = """당신은 다국어 영수증 OCR 분석 전문가입니다.
 
 ## 전문 분야
-- 일본어 (日本語) 영수증 분석 - 가장 중요!
+- 일본어 (日本語) 영수증 분석
 - 한국어 영수증 분석
 - 영어 영수증 분석
+- 중국어 (中文) 영수증 분석
+- 유럽 각국어 영수증 분석
 
 ## 날짜 형식 인식
 일본 영수증의 다양한 날짜 형식을 정확히 인식하세요:
 - 西暦: 2024年1月18日, 2024/01/18, 24.01.18
 - 令和: R6年1月18日, 令和6年1月18日 → 2024-01-18
 - 平成: H31年4月30日, 平成31年4月30日 → 2019-04-30
+유럽 날짜: DD/MM/YYYY 또는 DD.MM.YYYY
+
+## 통화 감지 규칙 (매우 중요!)
+영수증의 언어, 통화 기호, 국가 정보를 종합하여 통화를 정확히 판별하세요:
+
+| 기호/단서 | 통화 코드 |
+|-----------|-----------|
+| ¥, 円, 엔, 일본어 텍스트 | JPY |
+| ₩, 원, 한국어 텍스트 | KRW |
+| $, USD, 영어(미국) | USD |
+| ¥, 元, 人民币, 중국어 간체 | CNY |
+| €, EUR, 유럽 언어 | EUR |
+| HK$, HKD, 港幣 | HKD |
+| £, GBP | GBP |
+| A$, AUD | AUD |
+| C$, CAD | CAD |
+| CHF, Fr. (스위스) | CHF |
+| S$, SGD | SGD |
+| ฿, THB, 태국어 | THB |
+| NT$, TWD | TWD |
+| ₫, VND, 베트남어 | VND |
+| ₱, PHP | PHP |
+
+**중요**: ¥ 기호는 JPY와 CNY 모두 사용합니다. 텍스트 언어(일본어 vs 중국어)로 구분하세요.
 
 ## 금액 인식
-- 일본: ¥, 円, 엔 표시 확인
-- 한국: ₩, 원 표시 확인
-- 合計, 합계, Total, お支払い 등의 단어 근처 금액이 총액
+- 일본: ¥, 円 → 合計, お支払い 근처 금액
+- 한국: ₩, 원 → 합계 근처 금액
+- 미국/영어: $, Total 근처 금액
+- 중국: ¥, 元 → 合计, 总计 근처 금액
+- 유럽: €, Total, Summe, Totale 근처 금액
+- 홍콩: HK$, 總計 근처 금액
 
 ## 가게 유형 판별
-- コンビニ, ローソン, セブン, ファミマ → 음료/간식
-- レストラン, 食堂, 居酒屋 → 식사비
-- ホテル, 旅館, 宿泊 → 숙박비
-- JR, 電車, バス, タクシー, Suica, PASMO → 교통비
+- コンビニ, ローソン, セブン, ファミマ, 便利店 → 음료/간식
+- レストラン, 食堂, 居酒屋, 餐厅, Restaurant → 식사비
+- ホテル, 旅館, 宿泊, 酒店, Hotel → 숙박비
+- JR, 電車, バス, タクシー, Suica, PASMO, 地铁, Taxi, Uber → 교통비
 
 ## 가게명 표기 규칙 (매우 중요!)
 - 일본어 영수증: 가게명을 일본어 원문 그대로 표기 (예: アパホテル, ローソン, セブンイレブン)
-- 한자가 있으면 일본어 읽기로 표기 (예: 東京駅 → 도쿄에키 또는 東京駅 그대로)
+- 중국어 영수증: 가게명을 중국어 원문 그대로 표기
+- 영어 영수증: 영어 원문 그대로 표기
 - 한국어로 번역하지 마세요! 원문 유지!
 
 이 영수증 이미지를 분석해주세요.
@@ -91,11 +121,11 @@ def analyze_receipt_with_gemini(image_path: str) -> dict:
 {
     "date": "YYYY-MM-DD",
     "amount": 숫자,
-    "currency": "KRW" 또는 "JPY" 또는 "USD",
+    "currency": "통화코드 (KRW/JPY/USD/CNY/EUR/HKD/GBP/AUD/CAD/CHF/SGD/THB/TWD/VND/PHP)",
     "payment_method": "현금" 또는 "신용카드",
     "category": "교통비" 또는 "식사비" 또는 "음료/간식" 또는 "숙박비" 또는 "기타",
     "description": "가게명 (원문 그대로)",
-    "detected_language": "일본어" 또는 "한국어" 또는 "영어",
+    "detected_language": "감지된 언어",
     "raw_date_text": "영수증에 표시된 원본 날짜 텍스트"
 }
 ```
@@ -103,11 +133,9 @@ def analyze_receipt_with_gemini(image_path: str) -> dict:
 ## 주의사항
 - 날짜: 영수증에 적힌 날짜를 정확히 읽고 YYYY-MM-DD로 변환
 - 일본 연호(令和, 平成 등)는 서력으로 변환
-- 금액: 合計/Total/お支払い 금액 사용
-- 엔화(¥, 円)가 보이면 currency는 반드시 "JPY"
-- **description (가게명)**: 일본어 원문 그대로 표기! 번역하지 마세요!
-  - 예: アパホテル, ローソン, セブンイレブン, 東京駅
-  - 한국어 번역 금지! (아파호텔 ❌ → アパホテル ✓)
+- 금액: 합계/Total/お支払い/合计 금액 사용
+- 통화: 기호와 언어를 종합 판단하여 정확한 통화 코드 사용
+- **description (가게명)**: 원문 그대로 표기! 한국어로 번역하지 마세요!
 
 JSON만 반환해주세요."""
 
@@ -194,10 +222,11 @@ JSON만 반환해주세요."""
         }
 
 
-def calculate_krw_amount(amount: float, currency: str, payment_method: str) -> float:
+def calculate_krw_amount(amount: float, currency: str, payment_method: str) -> tuple[float, float]:
     """
     원화 환산액을 계산합니다.
     신용카드 결제 시 설정된 수수료율을 추가합니다.
+    Returns (krw_amount, exchange_rate)
     """
     from services.database import load_settings
     
@@ -211,4 +240,4 @@ def calculate_krw_amount(amount: float, currency: str, payment_method: str) -> f
     if payment_method == '신용카드':
         krw_amount *= (1 + credit_card_fee_rate)
     
-    return round(krw_amount)
+    return round(krw_amount), exchange_rate

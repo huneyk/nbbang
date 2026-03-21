@@ -952,6 +952,7 @@ function App() {
                       <th>지출 항목</th>
                       <th>금액</th>
                       <th>결제수단</th>
+                      <th>적용 환율</th>
                       <th>원화 환산액</th>
                       <th>세부 내역</th>
                       <th>지불한 사람</th>
@@ -973,6 +974,9 @@ function App() {
                           <span className={`badge ${expense.payment_method === '현금' ? 'badge-cash' : 'badge-card'}`}>
                             {expense.payment_method === '현금' ? '💵' : '💳'} {expense.payment_method}
                           </span>
+                        </td>
+                        <td className="amount exchange-rate">
+                          {expense.exchange_rate ? expense.exchange_rate.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}
                         </td>
                         <td className="amount krw-amount">
                           ₩{formatAmount(expense.krw_amount)}

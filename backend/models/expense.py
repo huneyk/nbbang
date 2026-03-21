@@ -16,6 +16,7 @@ class Expense:
         receipt_image: Optional[str] = None,
         is_personal_expense: bool = False,
         personal_expense_for: Optional[str] = None,
+        exchange_rate: Optional[float] = None,
         created_at: Optional[datetime] = None,
         _id: Optional[ObjectId] = None
     ):
@@ -31,6 +32,7 @@ class Expense:
         self.receipt_image = receipt_image
         self.is_personal_expense = is_personal_expense
         self.personal_expense_for = personal_expense_for
+        self.exchange_rate = exchange_rate
         self.created_at = created_at or datetime.utcnow()
     
     def to_dict(self) -> dict:
@@ -41,6 +43,7 @@ class Expense:
             'currency': self.currency,
             'payment_method': self.payment_method,
             'krw_amount': self.krw_amount,
+            'exchange_rate': self.exchange_rate,
             'description': self.description,
             'payer': self.payer,
             'receipt_image': self.receipt_image,
@@ -62,6 +65,7 @@ class Expense:
             currency=data.get('currency', 'KRW'),
             payment_method=data.get('payment_method', '현금'),
             krw_amount=data.get('krw_amount', 0),
+            exchange_rate=data.get('exchange_rate'),
             description=data.get('description', ''),
             payer=data.get('payer', ''),
             receipt_image=data.get('receipt_image'),

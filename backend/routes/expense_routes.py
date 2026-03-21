@@ -154,7 +154,7 @@ def create_expense():
         return jsonify({'success': False, 'error': '개인 지출 해당자를 선택해주세요.'}), 400
     
     # 원화 환산액 계산
-    krw_amount = calculate_krw_amount(
+    krw_amount, exchange_rate = calculate_krw_amount(
         float(data['amount']),
         data['currency'],
         data['payment_method']
@@ -171,7 +171,8 @@ def create_expense():
         payer=data['payer'],
         receipt_image=data.get('receipt_image'),
         is_personal_expense=is_personal_expense,
-        personal_expense_for=personal_expense_for
+        personal_expense_for=personal_expense_for,
+        exchange_rate=exchange_rate
     )
     
     db = get_database()
@@ -407,14 +408,33 @@ def get_exchange_rate_info():
 
 @expense_bp.route('/api/currencies', methods=['GET'])
 def get_currencies():
-    """모든 통화 목록을 반환합니다."""
+    """모든 통화 목록을 반환합니다. 기본 5개 통화가 항상 포함됩니다."""
+    from services.exchange_rate_service import CURRENCY_INFO, DEFAULT_FETCH_CURRENCIES
+    from services.database import DEFAULT_SETTINGS
+
     settings = load_settings()
-    currencies = settings.get('currencies', [
-        {'code': 'KRW', 'name': '원', 'flag': '🇰🇷', 'rate': 1.0, 'is_base': True},
-        {'code': 'JPY', 'name': '엔', 'flag': '🇯🇵', 'rate': 9.5, 'is_base': False},
-        {'code': 'USD', 'name': '달러', 'flag': '🇺🇸', 'rate': 1350.0, 'is_base': False}
-    ])
-    
+    currencies = settings.get('currencies', list(DEFAULT_SETTINGS['currencies']))
+
+    existing_codes = {c['code'] for c in currencies}
+    default_rates = DEFAULT_SETTINGS.get('exchange_rates', {})
+    added = False
+
+    for code in DEFAULT_FETCH_CURRENCIES:
+        if code not in existing_codes:
+            info = CURRENCY_INFO.get(code, {'name': code, 'flag': '🏳️'})
+            currencies.append({
+                'code': code,
+                'name': info['name'],
+                'flag': info['flag'],
+                'rate': default_rates.get(code, 1.0),
+                'is_base': False,
+            })
+            added = True
+
+    if added:
+        settings['currencies'] = currencies
+        save_settings(settings)
+
     return jsonify({
         'success': True,
         'data': currencies
@@ -784,21 +804,21 @@ def download_report():
     ws_expenses.title = "경비 내역"
     
     # 제목
-    ws_expenses.merge_cells('A1:I1')
+    ws_expenses.merge_cells('A1:J1')
     ws_expenses['A1'] = f'🌏 {trip_title} - 경비 내역서'
     ws_expenses['A1'].font = Font(bold=True, size=18, color='e94560')
     ws_expenses['A1'].alignment = center_align
     ws_expenses.row_dimensions[1].height = 35
     
     # 생성 날짜
-    ws_expenses.merge_cells('A2:I2')
+    ws_expenses.merge_cells('A2:J2')
     ws_expenses['A2'] = f"생성일: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
     ws_expenses['A2'].alignment = center_align
     ws_expenses['A2'].font = Font(size=10, color='666666')
     ws_expenses.row_dimensions[2].height = 20
     
     # 헤더 행
-    headers = ['날짜', '지출 항목', '금액', '통화', '결제수단', '원화 환산액', '세부 내역', '지불한 사람', '지출 유형']
+    headers = ['날짜', '지출 항목', '금액', '통화', '결제수단', '적용 환율', '원화 환산액', '세부 내역', '지불한 사람', '지출 유형']
     for col, header in enumerate(headers, 1):
         cell = ws_expenses.cell(row=4, column=col, value=header)
         cell.font = header_font
@@ -826,28 +846,37 @@ def download_report():
         ws_expenses.cell(row=row, column=5, value=exp.get('payment_method', '')).border = border
         ws_expenses.cell(row=row, column=5).alignment = center_align
         
-        krw_cell = ws_expenses.cell(row=row, column=6, value=exp.get('krw_amount', 0))
+        exchange_rate_val = exp.get('exchange_rate')
+        if exchange_rate_val is None and exp.get('amount') and exp.get('krw_amount'):
+            exchange_rate_val = round(exp['krw_amount'] / exp['amount'], 2) if exp['amount'] != 0 else None
+        rate_cell = ws_expenses.cell(row=row, column=6, value=exchange_rate_val or '')
+        rate_cell.font = Font(name='Consolas', size=11)
+        rate_cell.alignment = right_align
+        rate_cell.border = border
+        if exchange_rate_val:
+            rate_cell.number_format = '#,##0.00'
+        
+        krw_cell = ws_expenses.cell(row=row, column=7, value=exp.get('krw_amount', 0))
         krw_cell.font = Font(name='Consolas', size=11, color='ffc300')
         krw_cell.alignment = right_align
         krw_cell.border = border
         krw_cell.number_format = '₩#,##0'
         
-        ws_expenses.cell(row=row, column=7, value=exp.get('description', '')).border = border
-        ws_expenses.cell(row=row, column=8, value=exp.get('payer', '')).border = border
+        ws_expenses.cell(row=row, column=8, value=exp.get('description', '')).border = border
+        ws_expenses.cell(row=row, column=9, value=exp.get('payer', '')).border = border
         
         # 지출 유형
         expense_type = f"개인 ({exp.get('personal_expense_for', '')})" if is_personal else "공동"
-        type_cell = ws_expenses.cell(row=row, column=9, value=expense_type)
+        type_cell = ws_expenses.cell(row=row, column=10, value=expense_type)
         type_cell.border = border
         type_cell.alignment = center_align
         if is_personal:
             type_cell.font = Font(color='e94560')
-            # 개인 지출 행 배경색
-            for c in range(1, 10):
+            for c in range(1, 11):
                 ws_expenses.cell(row=row, column=c).fill = personal_fill
     
     # 열 너비 조정
-    column_widths = [12, 12, 15, 8, 12, 18, 25, 12, 14]
+    column_widths = [12, 12, 15, 8, 12, 14, 18, 25, 12, 14]
     for i, width in enumerate(column_widths, 1):
         ws_expenses.column_dimensions[get_column_letter(i)].width = width
     

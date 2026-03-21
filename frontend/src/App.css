@@ -1308,6 +1308,9 @@ header p {
 
   .card {
     padding: 1rem;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .card-title {
@@ -1319,14 +1322,63 @@ header p {
     padding: 2rem 1rem;
   }
 
+  /* 경비 내역 카드 - 테이블 가로 스크롤 */
+  .right-panel .card {
+    overflow-x: visible;
+    padding: 1rem 0;
+  }
+
+  .right-panel .card .card-title {
+    padding: 0 1rem;
+  }
+
+  .expense-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 1rem;
+  }
+
+  .expense-table {
+    min-width: 800px;
+    font-size: 0.8rem;
+  }
+
+  .expense-table th,
+  .expense-table td {
+    padding: 0.6rem 0.5rem;
+  }
+
+  .right-panel .empty-state {
+    padding: 3rem 1rem;
+  }
+
+  /* 나머지 카드들 - device width에 맞춤 */
+  .left-panel .card {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   .summary-grid {
     grid-template-columns: 1fr;
     gap: 1rem;
   }
 
+  .summary-card {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   .summary-card .value {
     font-size: 1.5rem;
     word-break: break-all;
+  }
+
+  .settlement-card-full {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .settlement-item {
@@ -1353,15 +1405,6 @@ header p {
     width: 100%;
     font-size: 0.95rem;
     padding: 0.85rem 1rem;
-  }
-
-  .expense-table {
-    font-size: 0.8rem;
-  }
-
-  .expense-table th,
-  .expense-table td {
-    padding: 0.6rem 0.5rem;
   }
 
   .form-row {

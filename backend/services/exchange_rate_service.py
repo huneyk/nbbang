@@ -39,6 +39,23 @@ KOREAEXIM_PER_100 = {'JPY(100)', 'IDR(100)', 'VND(100)'}
 
 DEFAULT_FETCH_CURRENCIES = ['USD', 'JPY', 'CNY', 'EUR', 'HKD']
 
+CURRENCY_INFO = {
+    'USD': {'name': '달러', 'flag': '🇺🇸'},
+    'JPY': {'name': '엔', 'flag': '🇯🇵'},
+    'CNY': {'name': '위안', 'flag': '🇨🇳'},
+    'EUR': {'name': '유로', 'flag': '🇪🇺'},
+    'HKD': {'name': '홍콩달러', 'flag': '🇭🇰'},
+    'GBP': {'name': '파운드', 'flag': '🇬🇧'},
+    'AUD': {'name': '호주달러', 'flag': '🇦🇺'},
+    'CAD': {'name': '캐나다달러', 'flag': '🇨🇦'},
+    'CHF': {'name': '스위스프랑', 'flag': '🇨🇭'},
+    'SGD': {'name': '싱가포르달러', 'flag': '🇸🇬'},
+    'THB': {'name': '바트', 'flag': '🇹🇭'},
+    'TWD': {'name': '대만달러', 'flag': '🇹🇼'},
+    'VND': {'name': '동', 'flag': '🇻🇳'},
+    'PHP': {'name': '페소', 'flag': '🇵🇭'},
+}
+
 
 def _apply_cash_buy_spread(base_rate: float, currency_code: str) -> float:
     spread = CASH_BUY_SPREADS.get(currency_code, DEFAULT_SPREAD)
@@ -135,8 +152,9 @@ def fetch_exchange_rates(settings: dict) -> dict:
 
     currencies = settings.get('currencies', [])
     target_codes = [c['code'] for c in currencies if not c.get('is_base')]
-    if not target_codes:
-        target_codes = DEFAULT_FETCH_CURRENCIES.copy()
+    for code in DEFAULT_FETCH_CURRENCIES:
+        if code not in target_codes:
+            target_codes.append(code)
 
     rates: Dict[str, float] = {}
     source = ''
@@ -170,13 +188,26 @@ def apply_fetched_rates(settings: dict, fetch_result: dict) -> dict:
     exchange_rates = settings.get('exchange_rates', {'KRW': 1.0})
     currencies = settings.get('currencies', [])
 
+    existing_codes = {c['code'] for c in currencies}
+
     for code, rate in new_rates.items():
         exchange_rates[code] = rate
         Config.EXCHANGE_RATES[code] = rate
-        for curr in currencies:
-            if curr['code'] == code:
-                curr['rate'] = rate
-                break
+
+        if code in existing_codes:
+            for curr in currencies:
+                if curr['code'] == code:
+                    curr['rate'] = rate
+                    break
+        else:
+            info = CURRENCY_INFO.get(code, {'name': code, 'flag': '🏳️'})
+            currencies.append({
+                'code': code,
+                'name': info['name'],
+                'flag': info['flag'],
+                'rate': rate,
+                'is_base': False,
+            })
 
     settings['exchange_rates'] = exchange_rates
     settings['currencies'] = currencies
