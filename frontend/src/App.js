@@ -963,27 +963,27 @@ function App() {
                   <tbody>
                     {expenses.map(expense => (
                       <tr key={expense._id} className={expense.is_personal_expense ? 'personal-expense-row' : ''}>
-                        <td>{expense.date}</td>
-                        <td>
+                        <td data-label="날짜">{expense.date}</td>
+                        <td data-label="지출 항목">
                           <span className="badge badge-category">{expense.category}</span>
                         </td>
-                        <td className="amount">
+                        <td data-label="금액" className="amount">
                           {formatAmount(expense.amount)} {expense.currency}
                         </td>
-                        <td>
+                        <td data-label="결제수단">
                           <span className={`badge ${expense.payment_method === '현금' ? 'badge-cash' : 'badge-card'}`}>
                             {expense.payment_method === '현금' ? '💵' : '💳'} {expense.payment_method}
                           </span>
                         </td>
-                        <td className="amount exchange-rate">
+                        <td data-label="적용 환율" className="amount exchange-rate">
                           {expense.exchange_rate ? expense.exchange_rate.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}
                         </td>
-                        <td className="amount krw-amount">
+                        <td data-label="원화 환산액" className="amount krw-amount">
                           ₩{formatAmount(expense.krw_amount)}
                         </td>
-                        <td>{expense.description}</td>
-                        <td>{expense.payer}</td>
-                        <td>
+                        <td data-label="세부 내역">{expense.description || '-'}</td>
+                        <td data-label="지불한 사람">{expense.payer}</td>
+                        <td data-label="유형">
                           {expense.is_personal_expense ? (
                             <span className="badge badge-personal" title={`${expense.personal_expense_for}의 개인 지출`}>
                               👤 {expense.personal_expense_for}

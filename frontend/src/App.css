@@ -1301,8 +1301,8 @@ header p {
   .settings-btn {
     top: 0.5rem;
     right: 0.5rem;
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     font-size: 1.2rem;
   }
 
@@ -1318,41 +1318,104 @@ header p {
     margin-bottom: 1rem;
   }
 
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    font-size: 16px;
+  }
+
   .dropzone {
     padding: 2rem 1rem;
   }
 
-  /* 경비 내역 카드 - 테이블 가로 스크롤 */
-  .right-panel .card {
-    overflow-x: visible;
-    padding: 1rem 0;
+  .dropzone-icon {
+    font-size: 2.2rem;
+    margin-bottom: 0.5rem;
   }
 
-  .right-panel .card .card-title {
-    padding: 0 1rem;
+  .dropzone p {
+    font-size: 0.9rem;
+  }
+
+  /* 경비 내역 - 모바일 카드 레이아웃 */
+  .right-panel .card {
+    overflow-x: hidden;
+    padding: 1rem;
   }
 
   .expense-table-wrapper {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding: 0 1rem;
+    overflow-x: visible;
   }
 
   .expense-table {
-    min-width: 800px;
-    font-size: 0.8rem;
+    min-width: 0;
+    font-size: 0.85rem;
   }
 
-  .expense-table th,
+  .expense-table thead {
+    display: none;
+  }
+
+  .expense-table,
+  .expense-table tbody {
+    display: block;
+  }
+
+  .expense-table tr {
+    display: block;
+    margin-bottom: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+  }
+
+  .expense-table tr:hover td {
+    background: transparent;
+  }
+
   .expense-table td {
-    padding: 0.6rem 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+    text-align: right;
+  }
+
+  .expense-table td::before {
+    content: attr(data-label);
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    text-align: left;
+    flex-shrink: 0;
+    margin-right: 0.75rem;
+  }
+
+  .expense-table td:last-child {
+    border-bottom: none;
+    justify-content: flex-end;
+    padding-top: 0.5rem;
+  }
+
+  .expense-table td:last-child::before {
+    display: none;
+  }
+
+  .expense-table .amount {
+    text-align: right;
+  }
+
+  .expense-table .personal-expense-row {
+    border-left: 3px solid var(--accent-danger);
   }
 
   .right-panel .empty-state {
     padding: 3rem 1rem;
   }
 
-  /* 나머지 카드들 - device width에 맞춤 */
+  /* 나머지 카드들 */
   .left-panel .card {
     width: 100%;
     max-width: 100%;
@@ -1397,6 +1460,17 @@ header p {
     bottom: 1rem;
   }
 
+  @keyframes slideIn {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
   .report-actions {
     margin: 1.5rem 0;
   }
@@ -1421,6 +1495,12 @@ header p {
     min-width: auto;
   }
 
+  .rate-item input {
+    font-size: 16px;
+    max-width: none;
+    flex: 1;
+  }
+
   .modal {
     width: 95%;
     max-height: 85vh;
@@ -1430,12 +1510,22 @@ header p {
     padding: 1rem;
   }
 
+  .modal-header h2 {
+    font-size: 1.1rem;
+  }
+
   .modal-body {
     padding: 1rem;
+    max-height: 55vh;
   }
 
   .modal-footer {
     padding: 0.75rem 1rem;
+  }
+
+  .modal-tab {
+    font-size: 0.8rem;
+    padding: 0.75rem 0.5rem;
   }
 
   .trip-item {
@@ -1453,7 +1543,118 @@ header p {
     flex: 1;
   }
 
+  .trip-meta {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
   .personal-expense-detail-item {
     gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .expense-type-options {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .btn {
+    min-height: 44px;
+  }
+
+  .delete-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .category-breakdown {
+    margin-top: 1rem;
+  }
+
+  .summary-breakdown p {
+    font-size: 0.75rem;
+  }
+
+  .exchange-rate-info {
+    font-size: 0.7rem;
+  }
+
+  .preview-image {
+    max-height: 150px;
+  }
+}
+
+/* 초소형 화면 (작은 폰) */
+@media (max-width: 480px) {
+  .app {
+    padding: 0.5rem;
+  }
+
+  header {
+    padding: 1rem 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  header h1 {
+    font-size: 1.25rem;
+  }
+
+  header p {
+    font-size: 0.85rem;
+  }
+
+  .card {
+    padding: 0.75rem;
+    border-radius: var(--radius-sm);
+  }
+
+  .card-title {
+    font-size: 0.95rem;
+  }
+
+  .summary-card .value {
+    font-size: 1.25rem;
+  }
+
+  .settlement-amount .diff {
+    font-size: 0.95rem;
+  }
+
+  .btn-download {
+    font-size: 0.85rem;
+    padding: 0.75rem;
+  }
+
+  .btn-primary {
+    font-size: 0.9rem;
+    padding: 0.75rem 1rem;
+  }
+
+  .expense-table td {
+    font-size: 0.8rem;
+  }
+
+  .expense-table td::before {
+    font-size: 0.75rem;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    height: 100%;
+  }
+
+  .modal-body {
+    max-height: calc(100vh - 140px);
+  }
+
+  .dropzone {
+    padding: 1.5rem 0.75rem;
+  }
+
+  .badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.4rem;
   }
 }
