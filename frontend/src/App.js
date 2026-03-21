@@ -853,7 +853,7 @@ function App() {
               )}
 
               <button type="submit" className="btn btn-primary" disabled={loading}>
-                {loading ? <div className="loading"></div> : '➕ 경비 등록'}
+                {loading ? <div className="loading"></div> : '➕ 추가 하기'}
               </button>
             </form>
           </div>
@@ -908,22 +908,6 @@ function App() {
                     onChange={(e) => handleRateChange(curr.code, e.target.value)}
                   />
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>KRW</span>
-                  <div className="currency-actions">
-                    <button 
-                      className="currency-edit-btn"
-                      onClick={() => openCurrencyModal(curr)}
-                      title="수정"
-                    >
-                      ✏️
-                    </button>
-                    <button 
-                      className="currency-delete-btn"
-                      onClick={() => handleDeleteCurrency(curr.code)}
-                      title="삭제"
-                    >
-                      🗑️
-                    </button>
-                  </div>
                 </div>
               ))}
               {currencies.filter(c => !c.is_base).length === 0 && (
