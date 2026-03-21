@@ -23,6 +23,11 @@
   box-sizing: border-box;
 }
 
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+}
+
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -1188,4 +1193,141 @@ header p {
 
 .summary-breakdown p:last-child {
   margin-bottom: 0;
+}
+
+/* 모바일 반응형 */
+@media (max-width: 768px) {
+  .app {
+    padding: 1rem;
+  }
+
+  header {
+    padding: 1.25rem 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+  }
+
+  header::before {
+    font-size: 4rem;
+    right: 0.5rem;
+  }
+
+  .settings-btn {
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 36px;
+    height: 36px;
+    font-size: 1.2rem;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+
+  .card-title {
+    font-size: 1.05rem;
+    margin-bottom: 1rem;
+  }
+
+  .dropzone {
+    padding: 2rem 1rem;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .summary-card .value {
+    font-size: 1.5rem;
+    word-break: break-all;
+  }
+
+  .settlement-item {
+    min-width: 0;
+    max-width: none;
+    flex-basis: 100%;
+  }
+
+  .settlements {
+    flex-direction: column;
+  }
+
+  .toast {
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+  }
+
+  .report-actions {
+    margin: 1.5rem 0;
+  }
+
+  .btn-download {
+    width: 100%;
+    font-size: 0.95rem;
+    padding: 0.85rem 1rem;
+  }
+
+  .expense-table {
+    font-size: 0.8rem;
+  }
+
+  .expense-table th,
+  .expense-table td {
+    padding: 0.6rem 0.5rem;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .rate-item {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .rate-item label {
+    min-width: auto;
+  }
+
+  .modal {
+    width: 95%;
+    max-height: 85vh;
+  }
+
+  .modal-header {
+    padding: 1rem;
+  }
+
+  .modal-body {
+    padding: 1rem;
+  }
+
+  .modal-footer {
+    padding: 0.75rem 1rem;
+  }
+
+  .trip-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .trip-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .trip-actions .btn-trip-load {
+    flex: 1;
+  }
+
+  .personal-expense-detail-item {
+    gap: 0.5rem;
+  }
 }
