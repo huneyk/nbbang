@@ -646,7 +646,7 @@ function App() {
         </div>
         <div className="navbar-title">
           <h1>🌏 {settings.trip_title || '여행 경비 정산'}</h1>
-          <p>영수증을 업로드하면 자동으로 분석합니다</p>
+          <p>"N빵 하자!" 영수증만 찰칵! 여행 경비 정산 실시간으로 끝!</p>
         </div>
         <button className="navbar-settings-btn" onClick={openSettings} title="설정">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
