@@ -9,30 +9,45 @@ from services.database import close_connection
 
 def create_app():
     """Flask 애플리케이션 팩토리"""
-    app = Flask(__name__)
+    static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+    has_static = os.path.isdir(static_folder)
+
+    if has_static:
+        app = Flask(__name__, static_folder=static_folder, static_url_path='')
+    else:
+        app = Flask(__name__)
+
     app.config.from_object(Config)
     
-    # 파일 업로드 크기 제한 명시적 설정 (50MB)
     app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
     
-    # CORS 설정 - 모든 원본 허용, Content-Disposition 헤더 노출
     CORS(app, resources={r"/api/*": {
         "origins": "*",
         "expose_headers": ["Content-Disposition"]
     }}, supports_credentials=True)
     
-    # 업로드 폴더 생성
     os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
     
-    # Blueprint 등록
     app.register_blueprint(expense_bp)
     
-    # 업로드된 이미지 서빙
+    if has_static:
+        @app.route('/')
+        def serve_react():
+            return send_from_directory(static_folder, 'index.html')
+
+        @app.route('/<path:path>')
+        def serve_static(path):
+            if path.startswith('api/'):
+                return jsonify({'error': 'Not found'}), 404
+            file_path = os.path.join(static_folder, path)
+            if os.path.exists(file_path):
+                return send_from_directory(static_folder, path)
+            return send_from_directory(static_folder, 'index.html')
+    
     @app.route('/uploads/<filename>')
     def uploaded_file(filename):
         return send_from_directory(Config.UPLOAD_FOLDER, filename)
     
-    # Health check
     @app.route('/api/health')
     def health_check():
         from services.ocr_service import get_google_api_key
@@ -43,7 +58,6 @@ def create_app():
             'google_api_key_configured': api_key_set
         }
     
-    # 파일 크기 초과 에러 핸들러
     @app.errorhandler(RequestEntityTooLarge)
     def handle_file_too_large(error):
         return jsonify({

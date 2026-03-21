@@ -28,6 +28,7 @@ yarn-error.log*
 # Build outputs
 dist/
 build/
+backend/static/
 *.egg-info/
 
 # Environment variables

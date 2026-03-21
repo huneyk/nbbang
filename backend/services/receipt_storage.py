@@ -5,6 +5,8 @@
 """
 
 import logging
+
+import certifi
 from pymongo import MongoClient
 from gridfs import GridFS
 from bson import ObjectId
@@ -19,7 +21,11 @@ _gridfs = None
 def _get_mongo_client() -> MongoClient:
     global _client
     if _client is None:
-        _client = MongoClient(Config.MONGODB_URI, serverSelectionTimeoutMS=5000)
+        _client = MongoClient(
+            Config.MONGODB_URI,
+            serverSelectionTimeoutMS=5000,
+            tlsCAFile=certifi.where()
+        )
     return _client
 
 

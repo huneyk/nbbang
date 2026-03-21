@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: tour-expense
+    runtime: python
+    buildCommand: "./build.sh"
+    startCommand: "cd backend && gunicorn 'app:create_app()' --bind 0.0.0.0:$PORT --timeout 120 --workers 2"
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: DATABASE_NAME
+        value: Tour-expense
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: NODE_VERSION
+        value: 20
+      - key: REACT_APP_API_BASE
+        value: ""
