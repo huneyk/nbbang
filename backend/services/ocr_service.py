@@ -4,69 +4,57 @@ import json
 import logging
 from datetime import datetime
 from typing import Optional
-import openai
+import google.generativeai as genai
+from PIL import Image
 from config import Config
 
-# 로깅 설정
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def get_openai_api_key() -> str:
+def get_google_api_key() -> str:
     """
-    OpenAI API 키를 가져옵니다.
+    Google API 키를 가져옵니다.
     1. Config에서 먼저 확인 (환경변수 또는 런타임 설정)
     2. 없으면 settings 파일에서 확인
     """
-    if Config.OPENAI_API_KEY:
-        return Config.OPENAI_API_KEY
+    if Config.GOOGLE_API_KEY:
+        return Config.GOOGLE_API_KEY
     
-    # settings 파일에서 API 키 확인
     from services.database import load_settings
     settings = load_settings()
-    api_key = settings.get('openai_api_key', '')
+    api_key = settings.get('google_api_key', '')
     
     if api_key:
-        # Config에도 설정하여 다음 호출 시 빠르게 접근
-        Config.OPENAI_API_KEY = api_key
+        Config.GOOGLE_API_KEY = api_key
     
     return api_key
 
 
-def analyze_receipt_with_gpt(image_path: str) -> dict:
+def analyze_receipt_with_gemini(image_path: str) -> dict:
     """
-    GPT-4 Vision을 사용하여 영수증을 분석합니다.
+    Gemini 2.5 Flash를 사용하여 영수증을 분석합니다.
     일본어, 한국어, 영어 영수증을 지원합니다.
     """
     logger.info(f"영수증 분석 시작: {image_path}")
     
-    api_key = get_openai_api_key()
+    api_key = get_google_api_key()
     
     if not api_key:
-        logger.error("OpenAI API 키가 설정되지 않았습니다.")
+        logger.error("Google API 키가 설정되지 않았습니다.")
         return {
             'success': False,
-            'error': 'OpenAI API 키가 설정되지 않았습니다. 설정에서 OpenAI API Key를 입력해주세요.',
+            'error': 'Google API 키가 설정되지 않았습니다. 설정에서 Google API Key를 입력해주세요.',
             'data': None
         }
     
     try:
-        # 이미지를 base64로 인코딩
-        with open(image_path, 'rb') as image_file:
-            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
-        # 이미지 확장자 확인
-        extension = image_path.lower().split('.')[-1]
-        mime_type = 'image/jpeg' if extension in ['jpg', 'jpeg'] else f'image/{extension}'
+        img = Image.open(image_path)
         
-        client = openai.OpenAI(api_key=api_key)
-        
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": """당신은 다국어 영수증 OCR 분석 전문가입니다.
+        prompt = """당신은 다국어 영수증 OCR 분석 전문가입니다.
 
 ## 전문 분야
 - 일본어 (日本語) 영수증 분석 - 가장 중요!
@@ -95,14 +83,7 @@ def analyze_receipt_with_gpt(image_path: str) -> dict:
 - 한자가 있으면 일본어 읽기로 표기 (예: 東京駅 → 도쿄에키 또는 東京駅 그대로)
 - 한국어로 번역하지 마세요! 원문 유지!
 
-이미지를 꼼꼼히 분석하여 모든 텍스트를 정확히 읽어주세요."""
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": """이 영수증 이미지를 분석해주세요. 
+이 영수증 이미지를 분석해주세요.
 이미지의 모든 텍스트를 주의 깊게 읽고, 특히 날짜와 금액을 정확히 파악해주세요.
 
 ## 응답 형식 (JSON)
@@ -129,46 +110,29 @@ def analyze_receipt_with_gpt(image_path: str) -> dict:
   - 한국어 번역 금지! (아파호텔 ❌ → アパホテル ✓)
 
 JSON만 반환해주세요."""
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{mime_type};base64,{base64_image}",
-                                "detail": "high"
-                            }
-                        }
-                    ]
-                }
-            ],
-            max_tokens=800
-        )
+
+        response = model.generate_content([prompt, img])
         
-        # GPT 응답 파싱
-        result_text = response.choices[0].message.content.strip()
-        logger.info(f"GPT 응답 수신: {result_text[:100]}...")
+        result_text = response.text.strip()
+        logger.info(f"Gemini 응답 수신: {result_text[:100]}...")
         
-        # JSON 블록 추출 (```json ... ``` 형식 처리)
         json_match = re.search(r'```json\s*([\s\S]*?)\s*```', result_text)
         if json_match:
             result_text = json_match.group(1)
         else:
-            # { } 블록만 추출
             json_match = re.search(r'\{[\s\S]*\}', result_text)
             if json_match:
                 result_text = json_match.group(0)
         
         parsed_result = json.loads(result_text)
         
-        # 날짜 유효성 검증 및 보정
         date_str = parsed_result.get('date', datetime.now().strftime('%Y-%m-%d'))
         try:
-            # 날짜 형식 검증
             datetime.strptime(date_str, '%Y-%m-%d')
         except ValueError:
             logger.warning(f"잘못된 날짜 형식: {date_str}, 오늘 날짜로 대체")
             date_str = datetime.now().strftime('%Y-%m-%d')
         
-        # 로그에 상세 정보 출력
         raw_date = parsed_result.get('raw_date_text', '')
         detected_lang = parsed_result.get('detected_language', '')
         if raw_date:
@@ -182,7 +146,7 @@ JSON만 반환해주세요."""
             'data': {
                 'date': date_str,
                 'amount': float(parsed_result.get('amount', 0)),
-                'currency': parsed_result.get('currency', 'JPY'),  # 기본값을 JPY로 변경 (일본 여행)
+                'currency': parsed_result.get('currency', 'JPY'),
                 'payment_method': parsed_result.get('payment_method', '현금'),
                 'category': parsed_result.get('category', '기타'),
                 'description': parsed_result.get('description', ''),
@@ -198,27 +162,6 @@ JSON만 반환해주세요."""
             'error': f'JSON 파싱 오류: {str(e)}',
             'data': None
         }
-    except openai.AuthenticationError as e:
-        logger.error(f"OpenAI 인증 오류: {str(e)}")
-        return {
-            'success': False,
-            'error': 'OpenAI API 키가 유효하지 않습니다. API 키를 확인해주세요.',
-            'data': None
-        }
-    except openai.RateLimitError as e:
-        logger.error(f"OpenAI API 한도 초과: {str(e)}")
-        return {
-            'success': False,
-            'error': 'OpenAI API 요청 한도가 초과되었습니다. 잠시 후 다시 시도해주세요.',
-            'data': None
-        }
-    except openai.APIConnectionError as e:
-        logger.error(f"OpenAI API 연결 오류: {str(e)}")
-        return {
-            'success': False,
-            'error': 'OpenAI API에 연결할 수 없습니다. 네트워크를 확인해주세요.',
-            'data': None
-        }
     except FileNotFoundError as e:
         logger.error(f"파일을 찾을 수 없음: {str(e)}")
         return {
@@ -227,10 +170,26 @@ JSON만 반환해주세요."""
             'data': None
         }
     except Exception as e:
-        logger.error(f"영수증 분석 오류: {type(e).__name__}: {str(e)}")
+        error_msg = str(e)
+        error_type = type(e).__name__
+        logger.error(f"영수증 분석 오류: {error_type}: {error_msg}")
+        
+        if 'API_KEY_INVALID' in error_msg or 'PERMISSION_DENIED' in error_msg:
+            return {
+                'success': False,
+                'error': 'Google API 키가 유효하지 않습니다. API 키를 확인해주세요.',
+                'data': None
+            }
+        if 'RESOURCE_EXHAUSTED' in error_msg or 'quota' in error_msg.lower():
+            return {
+                'success': False,
+                'error': 'Google API 요청 한도가 초과되었습니다. 잠시 후 다시 시도해주세요.',
+                'data': None
+            }
+        
         return {
             'success': False,
-            'error': f'영수증 분석 오류: {type(e).__name__}: {str(e)}',
+            'error': f'영수증 분석 오류: {error_type}: {error_msg}',
             'data': None
         }
 
@@ -244,12 +203,11 @@ def calculate_krw_amount(amount: float, currency: str, payment_method: str) -> f
     
     settings = load_settings()
     exchange_rates = settings.get('exchange_rates', Config.EXCHANGE_RATES)
-    credit_card_fee_rate = settings.get('credit_card_fee_rate', 2.5) / 100.0  # 퍼센트를 비율로 변환
+    credit_card_fee_rate = settings.get('credit_card_fee_rate', 2.5) / 100.0
     
     exchange_rate = exchange_rates.get(currency, 1.0)
     krw_amount = amount * exchange_rate
     
-    # 신용카드 결제 시 수수료 추가
     if payment_method == '신용카드':
         krw_amount *= (1 + credit_card_fee_rate)
     

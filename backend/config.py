@@ -5,9 +5,9 @@ load_dotenv()
 
 class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
-    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+    GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')
     MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
-    DATABASE_NAME = os.getenv('DATABASE_NAME', 'tour_expense')
+    DATABASE_NAME = os.getenv('DATABASE_NAME', 'Tour-expense')
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
     

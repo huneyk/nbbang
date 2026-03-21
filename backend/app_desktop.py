@@ -82,12 +82,12 @@ def create_desktop_app():
     # Health check
     @app.route('/api/health')
     def health_check():
-        from services.ocr_service import get_openai_api_key
-        api_key_set = bool(get_openai_api_key())
+        from services.ocr_service import get_google_api_key
+        api_key_set = bool(get_google_api_key())
         return {
             'status': 'ok', 
             'message': '여행 경비 정산 API 서버가 실행 중입니다.',
-            'openai_api_key_configured': api_key_set,
+            'google_api_key_configured': api_key_set,
             'desktop_mode': True
         }
     

@@ -35,12 +35,12 @@ def create_app():
     # Health check
     @app.route('/api/health')
     def health_check():
-        from services.ocr_service import get_openai_api_key
-        api_key_set = bool(get_openai_api_key())
+        from services.ocr_service import get_google_api_key
+        api_key_set = bool(get_google_api_key())
         return {
             'status': 'ok', 
             'message': '여행 경비 정산 API 서버가 실행 중입니다.',
-            'openai_api_key_configured': api_key_set
+            'google_api_key_configured': api_key_set
         }
     
     # 파일 크기 초과 에러 핸들러
@@ -51,10 +51,12 @@ def create_app():
             'error': '파일이 너무 큽니다. 최대 50MB까지 업로드 가능합니다.'
         }), 413
     
-    # 애플리케이션 종료 시 DB 연결 해제
     @app.teardown_appcontext
     def shutdown_session(exception=None):
-        pass  # MongoDB는 연결 풀을 자동 관리
+        pass
+
+    import atexit
+    atexit.register(close_connection)
     
     return app
 

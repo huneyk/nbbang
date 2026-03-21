@@ -54,7 +54,7 @@ function App() {
     participants: '',
     categories: '',
     credit_card_fee_rate: 2.5,
-    openai_api_key: ''
+    google_api_key: ''
   });
   
   // 새 여행 폼 상태
@@ -121,7 +121,7 @@ function App() {
         participants: (loadedSettings.participants || []).join(', '),
         categories: (loadedSettings.categories || []).join(', '),
         credit_card_fee_rate: loadedSettings.credit_card_fee_rate || 2.5,
-        openai_api_key: loadedSettings.openai_api_key || ''
+        google_api_key: loadedSettings.google_api_key || ''
       });
       
       // 기본 payer 설정 (첫 번째 참가자)
@@ -191,6 +191,9 @@ function App() {
       
       if (response.data.success) {
         const data = response.data.data;
+        if (data.receipt_image) {
+          setPreviewImage(`${API_BASE}/api/receipts/${data.receipt_image}/image`);
+        }
         setFormData(prev => ({
           ...prev,
           date: data.date || prev.date,
@@ -403,7 +406,7 @@ function App() {
       participants: (settings.participants || []).join(', '),
       categories: (settings.categories || []).join(', '),
       credit_card_fee_rate: settings.credit_card_fee_rate || 2.5,
-      openai_api_key: settings.openai_api_key || ''
+      google_api_key: settings.google_api_key || ''
     });
     setSettingsTab('current');
     setShowSettings(true);
@@ -421,7 +424,7 @@ function App() {
         categories: settingsForm.categories.split(',').map(c => c.trim()).filter(c => c),
         credit_card_fee_rate: parseFloat(settingsForm.credit_card_fee_rate) || 2.5,
         exchange_rates: exchangeRates,
-        openai_api_key: settingsForm.openai_api_key.trim()
+        google_api_key: settingsForm.google_api_key.trim()
       };
       
       // 참가자가 비어있으면 경고
@@ -620,16 +623,16 @@ function App() {
               {...getRootProps()} 
               className={`dropzone ${isDragActive ? 'active' : ''}`}
             >
-              <input {...getInputProps()} />
+              <input {...getInputProps({ capture: 'environment' })} />
               <div className="dropzone-icon">
                 {analyzing ? <div className="loading"></div> : '🧾'}
               </div>
               <p>
                 {analyzing 
                   ? '영수증 분석 중...' 
-                  : '영수증 이미지를 드래그하거나 클릭하세요'}
+                  : '영수증을 촬영하거나 이미지를 선택하세요'}
               </p>
-              <small>JPG, PNG, GIF, WEBP 지원</small>
+              <small>JPG, PNG, GIF, WEBP 지원 · 영수증 영역 자동 인식</small>
             </div>
             
             {previewImage && (
@@ -1127,15 +1130,15 @@ function App() {
                   </div>
                   
                   <div className="form-group">
-                    <label>🔑 OpenAI API Key</label>
+                    <label>🔑 Google API Key</label>
                     <input
                       type="password"
-                      name="openai_api_key"
-                      value={settingsForm.openai_api_key}
+                      name="google_api_key"
+                      value={settingsForm.google_api_key}
                       onChange={handleSettingsChange}
-                      placeholder="sk-..."
+                      placeholder="AIza..."
                     />
-                    <small className="form-hint">영수증 OCR 분석을 위한 OpenAI API 키를 입력하세요</small>
+                    <small className="form-hint">영수증 OCR 분석을 위한 Google API 키를 입력하세요 (Gemini 2.5 Flash)</small>
                   </div>
                   
                   <div className="new-trip-section">

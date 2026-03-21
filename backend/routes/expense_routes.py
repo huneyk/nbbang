@@ -10,12 +10,19 @@ from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 from config import Config
 from models.expense import Expense
-from services.ocr_service import analyze_receipt_with_gpt, calculate_krw_amount
+from services.ocr_service import analyze_receipt_with_gemini, calculate_krw_amount
 from services.database import (
     get_database, load_settings, save_settings,
     list_trips, archive_current_trip, create_new_trip, load_trip, delete_trip
 )
-from services.image_service import resize_image, get_image_info
+from services.image_service import (
+    resize_image, get_image_info,
+    fix_orientation_only, crop_receipt, downsize_for_storage
+)
+from services.receipt_storage import (
+    save_receipt as save_receipt_to_gridfs,
+    get_receipt as get_receipt_from_gridfs
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,66 +37,89 @@ def allowed_file(filename: str) -> bool:
 
 @expense_bp.route('/api/upload-receipt', methods=['POST'])
 def upload_receipt():
-    """영수증 이미지를 업로드하고 OCR 분석을 수행합니다."""
+    """영수증 이미지를 업로드하고 자동 crop → downsize → GridFS 저장 → OCR 분석을 수행합니다."""
     if 'receipt' not in request.files:
         return jsonify({'success': False, 'error': '파일이 없습니다.'}), 400
-    
+
     file = request.files['receipt']
-    
+
     if file.filename == '':
         return jsonify({'success': False, 'error': '파일이 선택되지 않았습니다.'}), 400
-    
+
     if not allowed_file(file.filename):
         return jsonify({'success': False, 'error': '지원하지 않는 파일 형식입니다.'}), 400
-    
-    # 업로드 폴더 생성
+
     upload_folder = Config.UPLOAD_FOLDER
     os.makedirs(upload_folder, exist_ok=True)
-    
-    # 파일 저장 (원본)
+
     filename = secure_filename(file.filename)
-    # 확장자를 jpg로 통일 (리사이즈 후 JPEG로 저장됨)
     base_name = os.path.splitext(filename)[0]
-    unique_filename = f"{uuid.uuid4()}_{base_name}.jpg"
-    file_path = os.path.join(upload_folder, unique_filename)
-    
-    # 임시 파일로 먼저 저장
-    temp_path = os.path.join(upload_folder, f"temp_{uuid.uuid4()}")
+    base_id = str(uuid.uuid4())
+
+    temp_path = os.path.join(upload_folder, f"temp_{base_id}")
+    oriented_path = os.path.join(upload_folder, f"oriented_{base_id}.jpg")
+    cropped_path = os.path.join(upload_folder, f"cropped_{base_id}.jpg")
+    ocr_path = os.path.join(upload_folder, f"ocr_{base_id}.jpg")
+    storage_path = os.path.join(upload_folder, f"storage_{base_id}.jpg")
+
+    temp_files = [temp_path, oriented_path, cropped_path, ocr_path, storage_path]
+
     file.save(temp_path)
-    
+
     try:
-        # 원본 이미지 정보 로깅
         original_info = get_image_info(temp_path)
         if original_info:
-            logger.info(f"원본 이미지 업로드: {original_info['width']}x{original_info['height']}, "
+            logger.info(f"원본 이미지: {original_info['width']}x{original_info['height']}, "
                        f"{original_info['file_size_kb']}KB")
-        
-        # 이미지 리사이즈 및 최적화
-        resize_image(temp_path, file_path)
-        
-        # 리사이즈된 이미지 정보 로깅
-        resized_info = get_image_info(file_path)
-        if resized_info:
-            logger.info(f"리사이즈 완료: {resized_info['width']}x{resized_info['height']}, "
-                       f"{resized_info['file_size_kb']}KB")
-        
-        # 임시 파일 삭제
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-            
+
+        # 1) EXIF 방향 보정
+        fix_orientation_only(temp_path, oriented_path)
+
+        # 2) 영수증 영역 자동 crop
+        is_cropped = crop_receipt(oriented_path, cropped_path)
+        logger.info(f"영수증 자동 crop: {'성공' if is_cropped else '윤곽 미감지 (원본 사용)'}")
+
+        # 3) OCR용 리사이즈 (max 4000px) 후 분석
+        resize_image(cropped_path, ocr_path)
+        result = analyze_receipt_with_gemini(ocr_path)
+
+        # 4) 저장용 다운사이즈 (max 1500px, max 500KB)
+        downsize_for_storage(cropped_path, storage_path)
+
+        # 5) MongoDB GridFS에 저장
+        storage_filename = f"{base_id}_{base_name}.jpg"
+        receipt_id = save_receipt_to_gridfs(storage_path, storage_filename)
+
+        if result['success']:
+            result['data']['receipt_image'] = receipt_id
+
+        return jsonify(result)
+
     except Exception as e:
-        logger.error(f"이미지 처리 오류: {str(e)}")
-        # 리사이즈 실패 시 원본 사용
-        if os.path.exists(temp_path):
-            os.rename(temp_path, file_path)
-    
-    # OCR 분석
-    result = analyze_receipt_with_gpt(file_path)
-    
-    if result['success']:
-        result['data']['receipt_image'] = unique_filename
-    
-    return jsonify(result)
+        logger.error(f"영수증 처리 오류: {str(e)}")
+        return jsonify({'success': False, 'error': f'영수증 처리에 실패했습니다: {str(e)}'}), 500
+
+    finally:
+        for p in temp_files:
+            try:
+                if os.path.exists(p):
+                    os.remove(p)
+            except OSError:
+                pass
+
+
+@expense_bp.route('/api/receipts/<receipt_id>/image', methods=['GET'])
+def get_receipt_image(receipt_id: str):
+    """GridFS에서 영수증 이미지를 서빙합니다."""
+    grid_out = get_receipt_from_gridfs(receipt_id)
+    if grid_out is None:
+        return jsonify({'success': False, 'error': '영수증 이미지를 찾을 수 없습니다.'}), 404
+
+    response = make_response(grid_out.read())
+    response.headers['Content-Type'] = grid_out.content_type or 'image/jpeg'
+    response.headers['Content-Disposition'] = f'inline; filename="{grid_out.filename}"'
+    response.headers['Cache-Control'] = 'public, max-age=31536000'
+    return response
 
 
 @expense_bp.route('/api/expenses', methods=['GET'])
@@ -510,10 +540,9 @@ def update_settings():
         # Config도 업데이트 (런타임에서 사용)
         Config.CREDIT_CARD_FEE_RATE = float(data['credit_card_fee_rate']) / 100.0
     
-    if 'openai_api_key' in data:
-        settings['openai_api_key'] = data['openai_api_key']
-        # Config도 업데이트 (런타임에서 사용)
-        Config.OPENAI_API_KEY = data['openai_api_key']
+    if 'google_api_key' in data:
+        settings['google_api_key'] = data['google_api_key']
+        Config.GOOGLE_API_KEY = data['google_api_key']
     
     if 'currencies' in data:
         settings['currencies'] = data['currencies']
