@@ -431,20 +431,6 @@ function App() {
     }
   };
 
-  // 통화 삭제
-  const handleDeleteCurrency = async (currencyCode) => {
-    if (!window.confirm(`${currencyCode} 통화를 삭제하시겠습니까?`)) return;
-    
-    try {
-      await axios.delete(`${API_BASE}/api/currencies/${currencyCode}`);
-      showToast('통화가 삭제되었습니다.');
-      loadData();
-    } catch (error) {
-      console.error('통화 삭제 오류:', error);
-      showToast(error.response?.data?.error || '통화 삭제에 실패했습니다.', 'error');
-    }
-  };
-
   // 설정 모달 열기
   const openSettings = () => {
     setSettingsForm({
