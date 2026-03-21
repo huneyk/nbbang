@@ -39,6 +39,8 @@ function App() {
     { code: 'JPY', name: '엔', flag: '🇯🇵', rate: 9.5, is_base: false },
     { code: 'USD', name: '달러', flag: '🇺🇸', rate: 1350.0, is_base: false }
   ]);
+  const [expandedExpenses, setExpandedExpenses] = useState(new Set());
+  const [isExchangeCardOpen, setIsExchangeCardOpen] = useState(true);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
   const [editingCurrency, setEditingCurrency] = useState(null);
   const [currencyForm, setCurrencyForm] = useState({
@@ -290,6 +292,15 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleExpense = (id) => {
+    setExpandedExpenses(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   // 경비 삭제
@@ -858,67 +869,75 @@ function App() {
             </form>
           </div>
 
-          <div className="card" style={{ marginTop: '1.5rem' }}>
-            <h2 className="card-title">
+          <div className="card card-collapsible" style={{ marginTop: '1.5rem' }}>
+            <h2 
+              className="card-title card-title-toggle"
+              onClick={() => setIsExchangeCardOpen(prev => !prev)}
+            >
+              <span className={`card-toggle-chevron ${isExchangeCardOpen ? 'open' : ''}`}>▶</span>
               <span>💱</span> 환율 설정
               <span className="card-title-badge">현찰살때</span>
               <button 
                 className="add-currency-btn"
-                onClick={() => openCurrencyModal()}
+                onClick={(e) => { e.stopPropagation(); openCurrencyModal(); }}
                 title="통화 추가"
               >
                 ➕
               </button>
             </h2>
             
-            <div className="exchange-rate-actions">
-              <button 
-                className="btn btn-fetch-rate"
-                onClick={handleFetchLatestRates}
-                disabled={fetchingRates}
-                title="최신 환율 가져오기"
-              >
-                {fetchingRates ? <div className="loading"></div> : '🔄 최신 환율 가져오기'}
-              </button>
-            </div>
-            
-            {exchangeRateInfo.updated_at && (
-              <div className="exchange-rate-info">
-                <span className="rate-info-label">마지막 갱신:</span>
-                <span className="rate-info-value">
-                  {new Date(exchangeRateInfo.updated_at).toLocaleString('ko-KR', {
-                    year: 'numeric', month: '2-digit', day: '2-digit',
-                    hour: '2-digit', minute: '2-digit'
-                  })}
-                </span>
-                {exchangeRateInfo.source && (
-                  <span className="rate-info-source">{exchangeRateInfo.source}</span>
+            {isExchangeCardOpen && (
+              <div className="card-collapsible-body">
+                <div className="exchange-rate-actions">
+                  <button 
+                    className="btn btn-fetch-rate"
+                    onClick={handleFetchLatestRates}
+                    disabled={fetchingRates}
+                    title="최신 환율 가져오기"
+                  >
+                    {fetchingRates ? <div className="loading"></div> : '🔄 최신 환율 가져오기'}
+                  </button>
+                </div>
+                
+                {exchangeRateInfo.updated_at && (
+                  <div className="exchange-rate-info">
+                    <span className="rate-info-label">마지막 갱신:</span>
+                    <span className="rate-info-value">
+                      {new Date(exchangeRateInfo.updated_at).toLocaleString('ko-KR', {
+                        year: 'numeric', month: '2-digit', day: '2-digit',
+                        hour: '2-digit', minute: '2-digit'
+                      })}
+                    </span>
+                    {exchangeRateInfo.source && (
+                      <span className="rate-info-source">{exchangeRateInfo.source}</span>
+                    )}
+                  </div>
                 )}
+
+                <div className="exchange-rates">
+                  {currencies.filter(c => !c.is_base).map(curr => (
+                    <div className="rate-item" key={curr.code}>
+                      <label>{curr.flag} 1 {curr.code} =</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={exchangeRates[curr.code] || curr.rate}
+                        onChange={(e) => handleRateChange(curr.code, e.target.value)}
+                      />
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>KRW</span>
+                    </div>
+                  ))}
+                  {currencies.filter(c => !c.is_base).length === 0 && (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                      등록된 외화가 없습니다. ➕ 버튼을 눌러 통화를 추가하세요.
+                    </p>
+                  )}
+                </div>
+                <small className="exchange-rate-note">
+                  매일 오전 4시에 자동 갱신됩니다. 환율은 수동으로도 조정할 수 있습니다.
+                </small>
               </div>
             )}
-
-            <div className="exchange-rates">
-              {currencies.filter(c => !c.is_base).map(curr => (
-                <div className="rate-item" key={curr.code}>
-                  <label>{curr.flag} 1 {curr.code} =</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={exchangeRates[curr.code] || curr.rate}
-                    onChange={(e) => handleRateChange(curr.code, e.target.value)}
-                  />
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>KRW</span>
-                </div>
-              ))}
-              {currencies.filter(c => !c.is_base).length === 0 && (
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                  등록된 외화가 없습니다. ➕ 버튼을 눌러 통화를 추가하세요.
-                </p>
-              )}
-            </div>
-            <small className="exchange-rate-note">
-              매일 오전 4시에 자동 갱신됩니다. 환율은 수동으로도 조정할 수 있습니다.
-            </small>
           </div>
         </div>
 
@@ -940,61 +959,90 @@ function App() {
                 <table className="expense-table">
                   <thead>
                     <tr>
+                      <th style={{ width: '2rem' }}></th>
                       <th>날짜</th>
                       <th>지출 항목</th>
                       <th>금액</th>
-                      <th>결제수단</th>
-                      <th>적용 환율</th>
                       <th>원화 환산액</th>
-                      <th>세부 내역</th>
-                      <th>지불한 사람</th>
-                      <th>유형</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {expenses.map(expense => (
-                      <tr key={expense._id} className={expense.is_personal_expense ? 'personal-expense-row' : ''}>
-                        <td data-label="날짜">{expense.date}</td>
-                        <td data-label="지출 항목">
-                          <span className="badge badge-category">{expense.category}</span>
-                        </td>
-                        <td data-label="금액" className="amount">
-                          {formatAmount(expense.amount)} {expense.currency}
-                        </td>
-                        <td data-label="결제수단">
-                          <span className={`badge ${expense.payment_method === '현금' ? 'badge-cash' : 'badge-card'}`}>
-                            {expense.payment_method === '현금' ? '💵' : '💳'} {expense.payment_method}
-                          </span>
-                        </td>
-                        <td data-label="적용 환율" className="amount exchange-rate">
-                          {expense.exchange_rate ? expense.exchange_rate.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}
-                        </td>
-                        <td data-label="원화 환산액" className="amount krw-amount">
-                          ₩{formatAmount(expense.krw_amount)}
-                        </td>
-                        <td data-label="세부 내역">{expense.description || '-'}</td>
-                        <td data-label="지불한 사람">{expense.payer}</td>
-                        <td data-label="유형">
-                          {expense.is_personal_expense ? (
-                            <span className="badge badge-personal" title={`${expense.personal_expense_for}의 개인 지출`}>
-                              👤 {expense.personal_expense_for}
-                            </span>
-                          ) : (
-                            <span className="badge badge-shared">👥 공동</span>
-                          )}
-                        </td>
-                        <td>
-                          <button 
-                            className="delete-btn"
-                            onClick={() => handleDelete(expense._id)}
-                            title="삭제"
+                    {expenses.map(expense => {
+                      const isExpanded = expandedExpenses.has(expense._id);
+                      return (
+                        <React.Fragment key={expense._id}>
+                          <tr 
+                            className={`expense-summary-row ${expense.is_personal_expense ? 'personal-expense-row' : ''} ${isExpanded ? 'expanded' : ''}`}
+                            onClick={() => toggleExpense(expense._id)}
                           >
-                            🗑️
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                            <td className="toggle-cell" data-label="">
+                              <span className={`toggle-chevron ${isExpanded ? 'open' : ''}`}>▶</span>
+                            </td>
+                            <td data-label="날짜">{expense.date}</td>
+                            <td data-label="지출 항목">
+                              <span className="badge badge-category">{expense.category}</span>
+                            </td>
+                            <td data-label="금액" className="amount">
+                              {formatAmount(expense.amount)} {expense.currency}
+                            </td>
+                            <td data-label="원화 환산액" className="amount krw-amount">
+                              ₩{formatAmount(expense.krw_amount)}
+                            </td>
+                            <td className="mobile-toggle-hint" data-label="">
+                              {isExpanded ? '접기' : '펼치기'}
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr className={`expense-detail-row ${expense.is_personal_expense ? 'personal-expense-row' : ''}`}>
+                              <td colSpan="6" data-label="">
+                                <div className="expense-detail-grid">
+                                  <div className="detail-item">
+                                    <span className="detail-label">결제수단</span>
+                                    <span className={`badge ${expense.payment_method === '현금' ? 'badge-cash' : 'badge-card'}`}>
+                                      {expense.payment_method === '현금' ? '💵' : '💳'} {expense.payment_method}
+                                    </span>
+                                  </div>
+                                  <div className="detail-item">
+                                    <span className="detail-label">적용 환율</span>
+                                    <span className="amount exchange-rate">
+                                      {expense.exchange_rate ? expense.exchange_rate.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}
+                                    </span>
+                                  </div>
+                                  <div className="detail-item">
+                                    <span className="detail-label">세부 내역</span>
+                                    <span>{expense.description || '-'}</span>
+                                  </div>
+                                  <div className="detail-item">
+                                    <span className="detail-label">지불한 사람</span>
+                                    <span>{expense.payer}</span>
+                                  </div>
+                                  <div className="detail-item">
+                                    <span className="detail-label">유형</span>
+                                    {expense.is_personal_expense ? (
+                                      <span className="badge badge-personal" title={`${expense.personal_expense_for}의 개인 지출`}>
+                                        👤 {expense.personal_expense_for}
+                                      </span>
+                                    ) : (
+                                      <span className="badge badge-shared">👥 공동</span>
+                                    )}
+                                  </div>
+                                  <div className="detail-item detail-actions">
+                                    <button 
+                                      className="delete-btn"
+                                      onClick={(e) => { e.stopPropagation(); handleDelete(expense._id); }}
+                                      title="삭제"
+                                    >
+                                      🗑️ 삭제
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}

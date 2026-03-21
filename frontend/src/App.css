@@ -163,6 +163,32 @@ body {
   font-size: 1.4rem;
 }
 
+/* Card toggle */
+.card-title-toggle {
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.15s ease;
+}
+
+.card-title-toggle:hover {
+  opacity: 0.8;
+}
+
+.card-toggle-chevron {
+  font-size: 0.6rem !important;
+  color: var(--text-muted);
+  transition: transform 0.25s ease;
+  flex-shrink: 0;
+}
+
+.card-toggle-chevron.open {
+  transform: rotate(90deg);
+}
+
+.card-collapsible-body {
+  animation: slideDown 0.2s ease;
+}
+
 /* 드롭존 스타일 */
 .dropzone {
   border: 2px dashed var(--border-color);
@@ -364,6 +390,77 @@ body {
 .badge-category {
   background: rgba(255, 195, 0, 0.15);
   color: var(--accent-gold);
+}
+
+/* Toggle chevron */
+.toggle-cell {
+  width: 2rem;
+  text-align: center;
+  cursor: pointer;
+}
+
+.toggle-chevron {
+  display: inline-block;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  transition: transform 0.25s ease;
+}
+
+.toggle-chevron.open {
+  transform: rotate(90deg);
+}
+
+.expense-summary-row {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.expense-summary-row:hover td {
+  background: rgba(46, 204, 113, 0.06);
+}
+
+.expense-summary-row.expanded td {
+  border-bottom-color: transparent;
+}
+
+.mobile-toggle-hint {
+  display: none;
+}
+
+/* Detail row */
+.expense-detail-row td {
+  padding: 0 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.expense-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem 1.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  animation: slideDown 0.2s ease;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.detail-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.detail-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
 }
 
 .delete-btn {
@@ -1390,11 +1487,28 @@ body {
 
   .expense-table tr {
     display: block;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0;
     padding: 0.75rem 1rem;
     background: var(--bg-secondary);
-    border-radius: var(--radius-sm);
     border: 1px solid var(--border-color);
+  }
+
+  .expense-table tr.expense-summary-row {
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.75rem;
+  }
+
+  .expense-table tr.expense-summary-row.expanded {
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    margin-bottom: 0;
+    border-bottom: none;
+  }
+
+  .expense-table tr.expense-detail-row {
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    margin-bottom: 0.75rem;
+    border-top: none;
+    padding-top: 0;
   }
 
   .expense-table tr:hover td {
@@ -1436,6 +1550,35 @@ body {
 
   .expense-table .personal-expense-row {
     border-left: 3px solid var(--accent-danger);
+  }
+
+  .toggle-cell {
+    display: none;
+  }
+
+  .mobile-toggle-hint {
+    display: flex !important;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: var(--accent-green);
+    font-weight: 500;
+    border-bottom: none !important;
+    padding-top: 0.25rem !important;
+  }
+
+  .expense-detail-row td {
+    padding: 0 0 0.5rem;
+    border-bottom: none;
+  }
+
+  .expense-detail-row td::before {
+    display: none;
+  }
+
+  .expense-detail-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.6rem 1rem;
+    padding: 0.5rem 0.75rem;
   }
 
   .right-panel .empty-state {
@@ -1677,6 +1820,10 @@ body {
 
   .expense-table td::before {
     font-size: 0.75rem;
+  }
+
+  .expense-detail-grid {
+    grid-template-columns: 1fr;
   }
 
   .modal {
