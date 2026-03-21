@@ -901,7 +901,7 @@ function App() {
                         value={exchangeRates[curr.code] || curr.rate}
                         onChange={(e) => handleRateChange(curr.code, e.target.value)}
                       />
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>KRW</span>
+                      <span className="rate-unit">KRW</span>
                     </div>
                   ))}
                   {currencies.filter(c => !c.is_base).length === 0 && (
