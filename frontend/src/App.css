@@ -229,6 +229,8 @@ body {
 /* 폼 스타일 */
 .form-group {
   margin-bottom: 1.25rem;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .form-group label {
@@ -243,6 +245,8 @@ body {
 .form-group select,
 .form-group textarea {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 0.75rem 1rem;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -1507,6 +1511,14 @@ body {
   .form-row {
     grid-template-columns: 1fr;
     gap: 0;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .form-group input[type="date"] {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
   }
 
   .rate-item {
