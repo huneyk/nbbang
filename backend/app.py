@@ -1,10 +1,37 @@
 import os
+import logging
 from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
+from flask_apscheduler import APScheduler
 from werkzeug.exceptions import RequestEntityTooLarge
 from config import Config
 from routes.expense_routes import expense_bp
-from services.database import close_connection
+from services.database import close_connection, load_settings, save_settings
+
+logger = logging.getLogger(__name__)
+scheduler = APScheduler()
+
+
+def scheduled_exchange_rate_update():
+    """매일 오전 4시에 실행되는 환율 자동 갱신 작업"""
+    from services.exchange_rate_service import fetch_exchange_rates, apply_fetched_rates
+
+    with scheduler.app.app_context():
+        try:
+            settings = load_settings()
+            result = fetch_exchange_rates(settings)
+
+            if result.get('rates'):
+                updated = apply_fetched_rates(settings, result)
+                save_settings(updated)
+                logger.info(
+                    f"환율 자동 갱신 완료: {result['source']} "
+                    f"({len(result['rates'])}개 통화)"
+                )
+            else:
+                logger.warning('환율 자동 갱신 실패: 조회된 환율 없음')
+        except Exception as e:
+            logger.error(f'환율 자동 갱신 오류: {e}')
 
 
 def create_app():
@@ -20,6 +47,19 @@ def create_app():
     app.config.from_object(Config)
     
     app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+
+    # APScheduler: 매일 오전 4시 (KST) 환율 자동 갱신
+    app.config['SCHEDULER_TIMEZONE'] = 'Asia/Seoul'
+    app.config['SCHEDULER_JOBS'] = [
+        {
+            'id': 'exchange_rate_update',
+            'func': 'app:scheduled_exchange_rate_update',
+            'trigger': 'cron',
+            'hour': 4,
+            'minute': 0,
+            'misfire_grace_time': 3600,
+        }
+    ]
     
     CORS(app, resources={r"/api/*": {
         "origins": "*",
@@ -29,6 +69,13 @@ def create_app():
     os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
     
     app.register_blueprint(expense_bp)
+
+    # 스케줄러 시작 (debug reloader 중복 방지)
+    is_reloader = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
+    if not app.debug or is_reloader:
+        scheduler.init_app(app)
+        scheduler.start()
+        logger.info('환율 자동 갱신 스케줄러 시작 (매일 04:00 KST)')
     
     if has_static:
         @app.route('/')

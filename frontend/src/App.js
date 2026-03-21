@@ -54,7 +54,8 @@ function App() {
     participants: '',
     categories: '',
     credit_card_fee_rate: 2.5,
-    google_api_key: ''
+    google_api_key: '',
+    koreaexim_api_key: ''
   });
   
   // 새 여행 폼 상태
@@ -84,6 +85,8 @@ function App() {
     JPY: 9.5,
     USD: 1350
   });
+  const [exchangeRateInfo, setExchangeRateInfo] = useState({});
+  const [fetchingRates, setFetchingRates] = useState(false);
 
   // 데이터 로드
   const loadData = useCallback(async () => {
@@ -99,6 +102,11 @@ function App() {
       setExpenses(expensesRes.data.data || []);
       setSummary(summaryRes.data.data);
       setConfig(configRes.data.data);
+
+      // 환율 갱신 정보
+      if (configRes.data.data?.exchange_rate_info) {
+        setExchangeRateInfo(configRes.data.data.exchange_rate_info);
+      }
       
       // 통화 목록 로드
       if (currenciesRes.data.data) {
@@ -121,7 +129,8 @@ function App() {
         participants: (loadedSettings.participants || []).join(', '),
         categories: (loadedSettings.categories || []).join(', '),
         credit_card_fee_rate: loadedSettings.credit_card_fee_rate || 2.5,
-        google_api_key: loadedSettings.google_api_key || ''
+        google_api_key: loadedSettings.google_api_key || '',
+        koreaexim_api_key: loadedSettings.koreaexim_api_key || ''
       });
       
       // 기본 payer 설정 (첫 번째 참가자)
@@ -297,6 +306,32 @@ function App() {
     }
   };
 
+  // 최신 환율 수동 가져오기
+  const handleFetchLatestRates = async () => {
+    setFetchingRates(true);
+    try {
+      const response = await axios.post(`${API_BASE}/api/exchange-rates/fetch`);
+      if (response.data.success) {
+        const { rates, source, updated_at, rate_type, currencies: updatedCurrencies } = response.data.data;
+        
+        setExchangeRates(prev => ({ ...prev, ...rates }));
+        setExchangeRateInfo({ source, updated_at, rate_type });
+        
+        if (updatedCurrencies) {
+          setCurrencies(updatedCurrencies);
+        }
+        
+        showToast(`환율이 갱신되었습니다 (${source})`, 'success');
+        loadData();
+      }
+    } catch (error) {
+      console.error('환율 갱신 오류:', error);
+      showToast(error.response?.data?.error || '환율 갱신에 실패했습니다.', 'error');
+    } finally {
+      setFetchingRates(false);
+    }
+  };
+
   // 환율 업데이트
   const handleRateChange = async (currency, value) => {
     const rate = parseFloat(value) || 0;
@@ -406,7 +441,8 @@ function App() {
       participants: (settings.participants || []).join(', '),
       categories: (settings.categories || []).join(', '),
       credit_card_fee_rate: settings.credit_card_fee_rate || 2.5,
-      google_api_key: settings.google_api_key || ''
+      google_api_key: settings.google_api_key || '',
+      koreaexim_api_key: settings.koreaexim_api_key || ''
     });
     setSettingsTab('current');
     setShowSettings(true);
@@ -424,7 +460,8 @@ function App() {
         categories: settingsForm.categories.split(',').map(c => c.trim()).filter(c => c),
         credit_card_fee_rate: parseFloat(settingsForm.credit_card_fee_rate) || 2.5,
         exchange_rates: exchangeRates,
-        google_api_key: settingsForm.google_api_key.trim()
+        google_api_key: settingsForm.google_api_key.trim(),
+        koreaexim_api_key: settingsForm.koreaexim_api_key.trim()
       };
       
       // 참가자가 비어있으면 경고
@@ -816,6 +853,7 @@ function App() {
           <div className="card" style={{ marginTop: '1.5rem' }}>
             <h2 className="card-title">
               <span>💱</span> 환율 설정
+              <span className="card-title-badge">현찰살때</span>
               <button 
                 className="add-currency-btn"
                 onClick={() => openCurrencyModal()}
@@ -824,6 +862,33 @@ function App() {
                 ➕
               </button>
             </h2>
+            
+            <div className="exchange-rate-actions">
+              <button 
+                className="btn btn-fetch-rate"
+                onClick={handleFetchLatestRates}
+                disabled={fetchingRates}
+                title="최신 환율 가져오기"
+              >
+                {fetchingRates ? <div className="loading"></div> : '🔄 최신 환율 가져오기'}
+              </button>
+            </div>
+            
+            {exchangeRateInfo.updated_at && (
+              <div className="exchange-rate-info">
+                <span className="rate-info-label">마지막 갱신:</span>
+                <span className="rate-info-value">
+                  {new Date(exchangeRateInfo.updated_at).toLocaleString('ko-KR', {
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit'
+                  })}
+                </span>
+                {exchangeRateInfo.source && (
+                  <span className="rate-info-source">{exchangeRateInfo.source}</span>
+                )}
+              </div>
+            )}
+
             <div className="exchange-rates">
               {currencies.filter(c => !c.is_base).map(curr => (
                 <div className="rate-item" key={curr.code}>
@@ -859,6 +924,9 @@ function App() {
                 </p>
               )}
             </div>
+            <small className="exchange-rate-note">
+              매일 오전 4시에 자동 갱신됩니다. 환율은 수동으로도 조정할 수 있습니다.
+            </small>
           </div>
         </div>
 
@@ -1139,6 +1207,25 @@ function App() {
                       placeholder="AIza..."
                     />
                     <small className="form-hint">영수증 OCR 분석을 위한 Google API 키를 입력하세요 (Gemini 2.5 Flash)</small>
+                  </div>
+                  
+                  <div className="form-group">
+                    <label>🏦 한국수출입은행 API Key (선택)</label>
+                    <input
+                      type="password"
+                      name="koreaexim_api_key"
+                      value={settingsForm.koreaexim_api_key}
+                      onChange={handleSettingsChange}
+                      placeholder="API 키 입력..."
+                    />
+                    <small className="form-hint">
+                      공식 환율 데이터를 위한 API 키입니다. 미입력시 무료 API로 자동 대체됩니다.
+                      <a href="https://www.koreaexim.go.kr/ir/HPHKIR020M01?apino=2&viewtype=C#tab2" 
+                         target="_blank" rel="noopener noreferrer"
+                         style={{ marginLeft: '4px', color: 'var(--accent)' }}>
+                        무료 발급
+                      </a>
+                    </small>
                   </div>
                   
                   <div className="new-trip-section">

@@ -8,15 +8,21 @@ class Config:
     GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')
     MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
     DATABASE_NAME = os.getenv('DATABASE_NAME', 'Tour-expense')
+    KOREAEXIM_API_KEY = os.getenv('KOREAEXIM_API_KEY', '')
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
     
     # 환율 설정 (KRW 기준)
     EXCHANGE_RATES = {
         'KRW': 1.0,
-        'JPY': 9.5,      # 1 JPY = 9.5 KRW
-        'USD': 1350.0    # 1 USD = 1350 KRW
+        'USD': 1350.0,
+        'JPY': 9.5,
+        'CNY': 185.0,
+        'EUR': 1480.0,
+        'HKD': 173.0,
     }
+    
+    SCHEDULER_API_ENABLED = False
     
     # 신용카드 수수료율
     CREDIT_CARD_FEE_RATE = 0.025  # 2.5%

@@ -1,18 +1,19 @@
 :root {
-  --bg-primary: #0f0f1a;
-  --bg-secondary: #1a1a2e;
-  --bg-card: #16213e;
-  --bg-hover: #1f3460;
-  --text-primary: #e8e8e8;
-  --text-secondary: #a0a0b0;
-  --text-muted: #6b6b7b;
-  --accent-primary: #e94560;
-  --accent-secondary: #0f3460;
-  --accent-gold: #ffc300;
-  --accent-green: #00d9a5;
-  --accent-blue: #4dabf7;
-  --border-color: #2a2a4a;
-  --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --bg-primary: #f0f9f4;
+  --bg-secondary: #e4f3eb;
+  --bg-card: #ffffff;
+  --bg-hover: #d6eddf;
+  --text-primary: #1a2e22;
+  --text-secondary: #3d5c47;
+  --text-muted: #7a9b85;
+  --accent-primary: #2ecc71;
+  --accent-secondary: #27ae60;
+  --accent-gold: #f39c12;
+  --accent-green: #00b894;
+  --accent-blue: #3498db;
+  --accent-danger: #e74c3c;
+  --border-color: #c5e1cf;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
   --radius: 12px;
   --radius-sm: 8px;
 }
@@ -33,8 +34,8 @@ body {
   color: var(--text-primary);
   min-height: 100vh;
   background-image: 
-    radial-gradient(ellipse at 10% 20%, rgba(233, 69, 96, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 90% 80%, rgba(15, 52, 96, 0.15) 0%, transparent 50%);
+    radial-gradient(ellipse at 10% 20%, rgba(46, 204, 113, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 80%, rgba(0, 184, 148, 0.1) 0%, transparent 50%);
 }
 
 .app {
@@ -67,7 +68,7 @@ header::before {
 header h1 {
   font-size: 2.5rem;
   font-weight: 700;
-  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-gold) 100%);
+  background: linear-gradient(135deg, var(--accent-primary) 0%, #1abc9c 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -121,13 +122,13 @@ header p {
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(46, 204, 113, 0.03);
 }
 
 .dropzone:hover,
 .dropzone.active {
   border-color: var(--accent-primary);
-  background: rgba(233, 69, 96, 0.05);
+  background: rgba(46, 204, 113, 0.08);
 }
 
 .dropzone-icon {
@@ -165,7 +166,7 @@ header p {
   justify-content: space-between;
   padding: 0.4rem 0;
   font-size: 0.9rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .ocr-result-item:last-child {
@@ -232,14 +233,14 @@ header p {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent-primary) 0%, #c73e54 100%);
+  background: linear-gradient(135deg, var(--accent-primary) 0%, #27ae60 100%);
   color: white;
   width: 100%;
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(233, 69, 96, 0.4);
+  box-shadow: 0 4px 20px rgba(46, 204, 113, 0.4);
 }
 
 .btn-primary:disabled {
@@ -276,7 +277,7 @@ header p {
 }
 
 .expense-table tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(46, 204, 113, 0.05);
 }
 
 .expense-table .amount {
@@ -323,8 +324,8 @@ header p {
 }
 
 .delete-btn:hover {
-  background: rgba(233, 69, 96, 0.2);
-  color: var(--accent-primary);
+  background: rgba(231, 76, 60, 0.12);
+  color: var(--accent-danger);
 }
 
 .empty-state {
@@ -435,7 +436,7 @@ header p {
 }
 
 .settlement-item.pay {
-  border-left-color: var(--accent-primary);
+  border-left-color: var(--accent-danger);
 }
 
 .settlement-item.settled {
@@ -466,7 +467,7 @@ header p {
 }
 
 .settlement-amount .diff.negative {
-  color: var(--accent-primary);
+  color: var(--accent-danger);
 }
 
 .settlement-amount .status {
@@ -508,7 +509,7 @@ header p {
 
 .category-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-primary), var(--accent-gold));
+  background: linear-gradient(90deg, var(--accent-primary), #1abc9c);
   border-radius: 3px;
   transition: width 0.5s ease;
 }
@@ -552,6 +553,88 @@ header p {
 .rate-item input:focus {
   outline: none;
   border-color: var(--accent-primary);
+}
+
+/* 환율 카드 배지 */
+.card-title-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(233, 69, 96, 0.15);
+  color: var(--accent-primary);
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  margin-left: 0.4rem;
+}
+
+/* 환율 갱신 버튼/정보 */
+.exchange-rate-actions {
+  margin-bottom: 0.75rem;
+}
+
+.btn-fetch-rate {
+  width: 100%;
+  padding: 0.55rem 1rem;
+  background: linear-gradient(135deg, rgba(0, 217, 165, 0.12), rgba(77, 171, 247, 0.12));
+  border: 1px solid rgba(0, 217, 165, 0.25);
+  border-radius: var(--radius-sm);
+  color: var(--accent-green);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.btn-fetch-rate:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(0, 217, 165, 0.2), rgba(77, 171, 247, 0.2));
+  border-color: var(--accent-green);
+  transform: translateY(-1px);
+}
+
+.btn-fetch-rate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.exchange-rate-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(77, 171, 247, 0.08);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.75rem;
+  font-size: 0.75rem;
+}
+
+.rate-info-label {
+  color: var(--text-muted);
+}
+
+.rate-info-value {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.rate-info-source {
+  color: var(--accent-blue);
+  font-size: 0.7rem;
+  margin-left: auto;
+}
+
+.exchange-rate-note {
+  display: block;
+  margin-top: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  text-align: center;
 }
 
 /* 통화 추가 버튼 */
@@ -600,7 +683,7 @@ header p {
 }
 
 .currency-delete-btn:hover {
-  background: rgba(233, 69, 96, 0.2);
+  background: rgba(231, 76, 60, 0.12);
 }
 
 /* 통화 모달 */
@@ -632,9 +715,9 @@ header p {
   display: inline-block;
   width: 20px;
   height: 20px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid rgba(46, 204, 113, 0.25);
   border-radius: 50%;
-  border-top-color: white;
+  border-top-color: var(--accent-primary);
   animation: spin 0.8s linear infinite;
 }
 
@@ -663,7 +746,7 @@ header p {
 }
 
 .toast.error {
-  border-left: 3px solid var(--accent-primary);
+  border-left: 3px solid var(--accent-danger);
 }
 
 @keyframes slideIn {
@@ -814,8 +897,8 @@ header p {
 }
 
 .modal-close:hover {
-  background: rgba(233, 69, 96, 0.2);
-  color: var(--accent-primary);
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-primary);
 }
 
 .modal-body {
@@ -884,7 +967,7 @@ header p {
 
 .modal-tab:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(46, 204, 113, 0.06);
 }
 
 .modal-tab.active {
@@ -912,7 +995,7 @@ header p {
 .btn-new-trip {
   width: 100%;
   background: linear-gradient(135deg, var(--accent-gold) 0%, #e6a800 100%);
-  color: #1a1a2e;
+  color: #1a2e22;
   font-weight: 600;
   padding: 0.85rem 1.5rem;
 }
@@ -953,7 +1036,7 @@ header p {
 }
 
 .trip-item:hover {
-  border-color: var(--accent-primary);
+  border-color: var(--accent-green);
   background: var(--bg-hover);
 }
 
@@ -1017,9 +1100,9 @@ header p {
 }
 
 .btn-trip-delete:hover {
-  background: rgba(233, 69, 96, 0.2);
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
+  background: rgba(231, 76, 60, 0.12);
+  border-color: var(--accent-danger);
+  color: var(--accent-danger);
 }
 
 /* 확인 메시지 */
@@ -1062,12 +1145,12 @@ header p {
 
 .expense-type-option:hover {
   border-color: var(--accent-primary);
-  background: rgba(233, 69, 96, 0.05);
+  background: rgba(46, 204, 113, 0.08);
 }
 
 .expense-type-option.selected {
   border-color: var(--accent-primary);
-  background: rgba(233, 69, 96, 0.1);
+  background: rgba(46, 204, 113, 0.12);
 }
 
 .expense-type-option input[type="radio"] {
@@ -1102,8 +1185,8 @@ header p {
 
 /* 개인 지출 배지 */
 .badge-personal {
-  background: rgba(233, 69, 96, 0.15);
-  color: var(--accent-primary);
+  background: rgba(231, 76, 60, 0.12);
+  color: var(--accent-danger);
   font-size: 0.75rem;
 }
 
@@ -1115,11 +1198,11 @@ header p {
 
 /* 개인 지출 행 하이라이트 */
 .personal-expense-row {
-  background: rgba(233, 69, 96, 0.03);
+  background: rgba(231, 76, 60, 0.04);
 }
 
 .personal-expense-row:hover td {
-  background: rgba(233, 69, 96, 0.06) !important;
+  background: rgba(231, 76, 60, 0.07) !important;
 }
 
 /* 정산 내역 개인 지출 표시 */
@@ -1140,16 +1223,16 @@ header p {
 
 .personal-label {
   font-size: 0.85rem;
-  color: var(--accent-primary);
+  color: var(--accent-danger);
   font-weight: 500;
 }
 
 .personal-expense-details {
   margin-top: 0.5rem;
   padding: 0.5rem;
-  background: rgba(233, 69, 96, 0.05);
+  background: rgba(231, 76, 60, 0.05);
   border-radius: 4px;
-  border-left: 2px solid var(--accent-primary);
+  border-left: 2px solid var(--accent-danger);
 }
 
 .personal-expense-detail-item {
@@ -1163,12 +1246,12 @@ header p {
 }
 
 .personal-expense-detail-item:not(:last-child) {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .detail-amount {
   font-family: 'JetBrains Mono', monospace;
-  color: var(--accent-primary);
+  color: var(--accent-danger);
   font-weight: 500;
   min-width: 80px;
 }
@@ -1182,7 +1265,7 @@ header p {
 .summary-breakdown {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .summary-breakdown p {

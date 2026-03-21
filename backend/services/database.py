@@ -6,6 +6,9 @@ import certifi
 from pymongo import MongoClient, DESCENDING
 from bson import ObjectId
 from config import Config
+from services.encryption import encrypt_value, decrypt_value
+
+SENSITIVE_FIELDS = ('google_api_key', 'koreaexim_api_key')
 
 
 _client: Optional[MongoClient] = None
@@ -18,15 +21,27 @@ DEFAULT_SETTINGS = {
     'categories': ['교통비', '식사비', '음료/간식', '숙박비', '기타'],
     'credit_card_fee_rate': 2.5,
     'google_api_key': '',
+    'koreaexim_api_key': '',
     'currencies': [
         {'code': 'KRW', 'name': '원', 'flag': '🇰🇷', 'rate': 1.0, 'is_base': True},
+        {'code': 'USD', 'name': '달러', 'flag': '🇺🇸', 'rate': 1350.0, 'is_base': False},
         {'code': 'JPY', 'name': '엔', 'flag': '🇯🇵', 'rate': 9.5, 'is_base': False},
-        {'code': 'USD', 'name': '달러', 'flag': '🇺🇸', 'rate': 1350.0, 'is_base': False}
+        {'code': 'CNY', 'name': '위안', 'flag': '🇨🇳', 'rate': 185.0, 'is_base': False},
+        {'code': 'EUR', 'name': '유로', 'flag': '🇪🇺', 'rate': 1480.0, 'is_base': False},
+        {'code': 'HKD', 'name': '홍콩달러', 'flag': '🇭🇰', 'rate': 173.0, 'is_base': False},
     ],
     'exchange_rates': {
         'KRW': 1.0,
+        'USD': 1350.0,
         'JPY': 9.5,
-        'USD': 1350.0
+        'CNY': 185.0,
+        'EUR': 1480.0,
+        'HKD': 173.0,
+    },
+    'exchange_rate_info': {
+        'source': '',
+        'updated_at': '',
+        'rate_type': '',
     }
 }
 
@@ -57,8 +72,26 @@ def _serialize_doc(doc: Optional[Dict]) -> Optional[Dict]:
 
 # ===== 설정 관리 =====
 
+def _encrypt_sensitive(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """민감 필드를 암호화한 복사본 반환"""
+    result = dict(settings)
+    for field in SENSITIVE_FIELDS:
+        if field in result and result[field]:
+            result[field] = encrypt_value(result[field])
+    return result
+
+
+def _decrypt_sensitive(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """민감 필드를 복호화한 복사본 반환"""
+    result = dict(settings)
+    for field in SENSITIVE_FIELDS:
+        if field in result and result[field]:
+            result[field] = decrypt_value(result[field])
+    return result
+
+
 def load_settings() -> Dict[str, Any]:
-    """저장된 설정 로드"""
+    """저장된 설정 로드 (민감 필드 자동 복호화)"""
     db = _get_db()
     settings = db.settings.find_one({'_type': 'app_settings'})
 
@@ -75,13 +108,14 @@ def load_settings() -> Dict[str, Any]:
         if key not in settings:
             settings[key] = value
 
-    return settings
+    return _decrypt_sensitive(settings)
 
 
 def save_settings(settings: Dict[str, Any]):
-    """설정 저장"""
+    """설정 저장 (민감 필드 자동 암호화)"""
     db = _get_db()
     update_data = {k: v for k, v in settings.items() if k not in ('_id', '_type')}
+    update_data = _encrypt_sensitive(update_data)
     update_data['_type'] = 'app_settings'
     db.settings.replace_one(
         {'_type': 'app_settings'},
@@ -125,7 +159,7 @@ def archive_current_trip() -> Optional[str]:
         'trip_id': trip_id,
         'created_at': settings.get('created_at', archived_at),
         'archived_at': archived_at,
-        'settings': settings,
+        'settings': _encrypt_sensitive(settings),
         'expenses': expenses
     }
 
@@ -165,6 +199,7 @@ def load_trip(trip_id: str) -> Optional[Dict[str, Any]]:
         return None
 
     settings = trip_data.get('settings', DEFAULT_SETTINGS.copy())
+    settings = _decrypt_sensitive(settings)
     settings['trip_id'] = trip_id
     expenses = trip_data.get('expenses', [])
 

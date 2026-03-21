@@ -4,14 +4,19 @@ macOS 데스크톱 앱용 Flask 애플리케이션
 """
 import os
 import sys
+import logging
 import webbrowser
 import threading
 from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
+from flask_apscheduler import APScheduler
 from werkzeug.exceptions import RequestEntityTooLarge
 from config import Config
 from routes.expense_routes import expense_bp
-from services.database import close_connection
+from services.database import close_connection, load_settings, save_settings
+
+logger = logging.getLogger(__name__)
+desktop_scheduler = APScheduler()
 
 
 def get_resource_path(relative_path: str) -> str:
@@ -60,6 +65,22 @@ def create_desktop_app():
     
     # Blueprint 등록
     app.register_blueprint(expense_bp)
+
+    # APScheduler: 매일 오전 4시 (KST) 환율 자동 갱신
+    app.config['SCHEDULER_TIMEZONE'] = 'Asia/Seoul'
+    app.config['SCHEDULER_JOBS'] = [
+        {
+            'id': 'exchange_rate_update_desktop',
+            'func': 'app:scheduled_exchange_rate_update',
+            'trigger': 'cron',
+            'hour': 4,
+            'minute': 0,
+            'misfire_grace_time': 3600,
+        }
+    ]
+    desktop_scheduler.init_app(app)
+    desktop_scheduler.start()
+    logger.info('환율 자동 갱신 스케줄러 시작 (매일 04:00 KST)')
     
     # React 앱 서빙 (정적 파일)
     @app.route('/')

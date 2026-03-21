@@ -314,8 +314,11 @@ def get_config():
     settings = load_settings()
     currencies = settings.get('currencies', [
         {'code': 'KRW', 'name': '원', 'flag': '🇰🇷', 'rate': 1.0, 'is_base': True},
+        {'code': 'USD', 'name': '달러', 'flag': '🇺🇸', 'rate': 1350.0, 'is_base': False},
         {'code': 'JPY', 'name': '엔', 'flag': '🇯🇵', 'rate': 9.5, 'is_base': False},
-        {'code': 'USD', 'name': '달러', 'flag': '🇺🇸', 'rate': 1350.0, 'is_base': False}
+        {'code': 'CNY', 'name': '위안', 'flag': '🇨🇳', 'rate': 185.0, 'is_base': False},
+        {'code': 'EUR', 'name': '유로', 'flag': '🇪🇺', 'rate': 1480.0, 'is_base': False},
+        {'code': 'HKD', 'name': '홍콩달러', 'flag': '🇭🇰', 'rate': 173.0, 'is_base': False},
     ])
     return jsonify({
         'success': True,
@@ -324,8 +327,9 @@ def get_config():
             'participants': settings.get('participants', []),
             'categories': settings.get('categories', []),
             'currencies': currencies,
-            'exchange_rates': settings.get('exchange_rates', {'KRW': 1.0, 'JPY': 9.5, 'USD': 1350.0}),
-            'credit_card_fee_rate': settings.get('credit_card_fee_rate', 2.5)
+            'exchange_rates': settings.get('exchange_rates', {'KRW': 1.0, 'USD': 1350.0, 'JPY': 9.5}),
+            'credit_card_fee_rate': settings.get('credit_card_fee_rate', 2.5),
+            'exchange_rate_info': settings.get('exchange_rate_info', {}),
         }
     })
 
@@ -356,6 +360,46 @@ def update_exchange_rates():
     return jsonify({
         'success': True,
         'data': exchange_rates
+    })
+
+
+@expense_bp.route('/api/exchange-rates/fetch', methods=['POST'])
+def fetch_latest_exchange_rates():
+    """최신 환율을 수동으로 가져옵니다 (현찰살때 기준)."""
+    from services.exchange_rate_service import fetch_exchange_rates, apply_fetched_rates
+
+    settings = load_settings()
+    result = fetch_exchange_rates(settings)
+
+    if not result.get('rates'):
+        return jsonify({
+            'success': False,
+            'error': '환율 조회에 실패했습니다. 잠시 후 다시 시도해주세요.'
+        }), 502
+
+    updated = apply_fetched_rates(settings, result)
+    save_settings(updated)
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'rates': result['rates'],
+            'source': result['source'],
+            'updated_at': result['updated_at'],
+            'rate_type': result['rate_type'],
+            'currencies': updated.get('currencies', []),
+        }
+    })
+
+
+@expense_bp.route('/api/exchange-rates/info', methods=['GET'])
+def get_exchange_rate_info():
+    """마지막 환율 갱신 정보를 반환합니다."""
+    settings = load_settings()
+    info = settings.get('exchange_rate_info', {})
+    return jsonify({
+        'success': True,
+        'data': info
     })
 
 
@@ -543,6 +587,10 @@ def update_settings():
     if 'google_api_key' in data:
         settings['google_api_key'] = data['google_api_key']
         Config.GOOGLE_API_KEY = data['google_api_key']
+    
+    if 'koreaexim_api_key' in data:
+        settings['koreaexim_api_key'] = data['koreaexim_api_key']
+        Config.KOREAEXIM_API_KEY = data['koreaexim_api_key']
     
     if 'currencies' in data:
         settings['currencies'] = data['currencies']
