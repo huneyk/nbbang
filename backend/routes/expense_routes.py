@@ -1042,16 +1042,26 @@ def download_report():
     return response
 
 
+_korean_font_registered = None
+
+
 def _register_korean_font():
-    """한글 폰트를 등록합니다. macOS/Linux/Windows 순으로 탐색합니다."""
+    """한글 폰트를 등록합니다. 프로젝트 내장 Google Font를 우선 사용합니다."""
+    global _korean_font_registered
+    if _korean_font_registered is not None:
+        return _korean_font_registered
+
+    bundled_font = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        'fonts', 'NotoSansKR-Regular.ttf'
+    )
+
     font_candidates = [
+        (bundled_font, None),
         ('/Library/Fonts/Arial Unicode.ttf', None),
         ('/System/Library/Fonts/Supplemental/AppleGothic.ttf', None),
-        ('/System/Library/Fonts/Supplemental/NotoSansGothic-Regular.ttf', None),
         ('/usr/share/fonts/truetype/nanum/NanumGothic.ttf', None),
-        ('/usr/share/fonts/truetype/noto/NotoSansCJKkr-Regular.otf', None),
         ('C:/Windows/Fonts/malgun.ttf', None),
-        ('/System/Library/Fonts/AppleSDGothicNeo.ttc', 0),
     ]
     for path, subfont_idx in font_candidates:
         if not os.path.exists(path):
@@ -1062,11 +1072,13 @@ def _register_korean_font():
             else:
                 pdfmetrics.registerFont(TTFont('Korean', path))
             logger.info(f"한글 폰트 등록 성공: {path}")
+            _korean_font_registered = 'Korean'
             return 'Korean'
         except Exception as e:
             logger.warning(f"폰트 로드 실패 ({path}): {e}")
             continue
     logger.error("한글 폰트를 찾을 수 없습니다. Helvetica를 사용합니다.")
+    _korean_font_registered = 'Helvetica'
     return 'Helvetica'
 
 
