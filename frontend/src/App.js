@@ -40,8 +40,9 @@ function App() {
     { code: 'USD', name: '달러', flag: '🇺🇸', rate: 1350.0, is_base: false }
   ]);
   const [isExchangeCardOpen, setIsExchangeCardOpen] = useState(true);
-  const [isExpenseListOpen, setIsExpenseListOpen] = useState(true);
+  const [isExpenseListOpen, setIsExpenseListOpen] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+  const [receiptModalImage, setReceiptModalImage] = useState(null);
   const [editingCurrency, setEditingCurrency] = useState(null);
   const [currencyForm, setCurrencyForm] = useState({
     code: '',
@@ -954,6 +955,7 @@ function App() {
                         <th>원화 환산액</th>
                         <th>세부 내역</th>
                         <th>지불한 사람</th>
+                        <th>영수증</th>
                         <th>유형</th>
                         <th></th>
                       </tr>
@@ -981,6 +983,19 @@ function App() {
                           </td>
                           <td data-label="세부 내역">{expense.description || '-'}</td>
                           <td data-label="지불한 사람">{expense.payer}</td>
+                          <td data-label="영수증" className="receipt-cell">
+                            {expense.receipt_image ? (
+                              <button
+                                className="receipt-icon-btn"
+                                onClick={() => setReceiptModalImage(`${API_BASE}/api/receipts/${expense.receipt_image}/image`)}
+                                title="영수증 보기"
+                              >
+                                🧾
+                              </button>
+                            ) : (
+                              <span className="no-receipt">-</span>
+                            )}
+                          </td>
                           <td data-label="유형">
                             {expense.is_personal_expense ? (
                               <span className="badge badge-personal" title={`${expense.personal_expense_for}의 개인 지출`}>
@@ -1462,6 +1477,29 @@ function App() {
               <button className="btn btn-primary" onClick={handleSaveCurrency} disabled={loading}>
                 {loading ? <div className="loading"></div> : (editingCurrency ? '수정' : '추가')}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 영수증 이미지 모달 */}
+      {receiptModalImage && (
+        <div className="modal-overlay" onClick={() => setReceiptModalImage(null)}>
+          <div className="modal receipt-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>🧾 영수증</h2>
+              <button className="modal-close" onClick={() => setReceiptModalImage(null)}>×</button>
+            </div>
+            <div className="modal-body receipt-modal-body">
+              <img
+                src={receiptModalImage}
+                alt="영수증"
+                className="receipt-modal-image"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.parentNode.innerHTML = '<p class="receipt-error">영수증 이미지를 불러올 수 없습니다.</p>';
+                }}
+              />
             </div>
           </div>
         </div>
