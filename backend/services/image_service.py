@@ -129,9 +129,36 @@ def _four_point_transform(image: 'np.ndarray', pts: 'np.ndarray') -> 'np.ndarray
     return cv2.warpPerspective(image, M, (max_width, max_height))
 
 
+def _find_quad_in_contours(binary_img: 'np.ndarray', min_area: float) -> 'np.ndarray | None':
+    """이진 이미지에서 사각형 윤곽을 찾습니다. 여러 epsilon 값과 minAreaRect 폴백을 사용합니다."""
+    contours, _ = cv2.findContours(binary_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:10]
+
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area < min_area:
+            continue
+
+        peri = cv2.arcLength(contour, True)
+
+        for eps_mult in [0.02, 0.04, 0.06, 0.08]:
+            approx = cv2.approxPolyDP(contour, eps_mult * peri, True)
+            if len(approx) == 4 and cv2.isContourConvex(approx):
+                return approx
+
+        rect = cv2.minAreaRect(contour)
+        box = cv2.boxPoints(rect)
+        box_area = cv2.contourArea(np.int32(box))
+        if box_area > min_area:
+            return np.int32(box).reshape(4, 1, 2)
+
+    return None
+
+
 def crop_receipt(input_path: str, output_path: str = None) -> bool:
     """
     이미지에서 영수증 영역을 감지하고 crop합니다.
+    여러 전처리 전략(Canny, adaptive threshold, OTSU)을 순차적으로 시도합니다.
     Returns True if receipt contour was detected, False otherwise.
     어느 경우든 output_path에 유효한 이미지를 저장합니다.
     """
@@ -163,30 +190,57 @@ def crop_receipt(input_path: str, output_path: str = None) -> bool:
         scale = 1.0
 
     gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    resized_area = resized.shape[0] * resized.shape[1]
+    min_area = resized_area * 0.10
 
+    close_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
     receipt_contour = None
-    for low_thresh, high_thresh in [(30, 200), (50, 150), (75, 200), (20, 100)]:
-        edged = cv2.Canny(blurred, low_thresh, high_thresh)
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        edged = cv2.dilate(edged, kernel, iterations=2)
 
-        contours, _ = cv2.findContours(edged, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:10]
-
-        for contour in contours:
-            peri = cv2.arcLength(contour, True)
-            approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
-
-            if len(approx) == 4:
-                area = cv2.contourArea(approx)
-                img_area = resized.shape[0] * resized.shape[1]
-                if area > img_area * 0.15:
-                    receipt_contour = approx
-                    break
-
+    # Strategy 1: Canny edge detection (Gaussian blur + bilateral filter)
+    preprocessed = [
+        cv2.GaussianBlur(gray, (5, 5), 0),
+        cv2.bilateralFilter(gray, 11, 17, 17),
+    ]
+    for prep in preprocessed:
         if receipt_contour is not None:
             break
+        for low_t, high_t in [(30, 200), (50, 150), (75, 200), (20, 100)]:
+            edged = cv2.Canny(prep, low_t, high_t)
+            dilate_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            edged = cv2.dilate(edged, dilate_kernel, iterations=2)
+            edged = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, close_kernel, iterations=2)
+
+            receipt_contour = _find_quad_in_contours(edged, min_area)
+            if receipt_contour is not None:
+                logger.info("영수증 감지 전략: Canny edge detection")
+                break
+
+    # Strategy 2: Adaptive thresholding
+    if receipt_contour is None:
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        for block_size in [11, 21, 31]:
+            thresh = cv2.adaptiveThreshold(
+                blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY, block_size, 2
+            )
+            thresh = cv2.bitwise_not(thresh)
+            thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, close_kernel, iterations=3)
+
+            receipt_contour = _find_quad_in_contours(thresh, min_area)
+            if receipt_contour is not None:
+                logger.info("영수증 감지 전략: adaptive threshold")
+                break
+
+    # Strategy 3: OTSU thresholding
+    if receipt_contour is None:
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        _, otsu = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        otsu = cv2.bitwise_not(otsu)
+        otsu = cv2.morphologyEx(otsu, cv2.MORPH_CLOSE, close_kernel, iterations=3)
+
+        receipt_contour = _find_quad_in_contours(otsu, min_area)
+        if receipt_contour is not None:
+            logger.info("영수증 감지 전략: OTSU threshold")
 
     if receipt_contour is not None:
         pts = (receipt_contour.reshape(4, 2) / scale).astype(np.float32)
