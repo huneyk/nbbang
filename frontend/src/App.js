@@ -83,6 +83,8 @@ function App() {
     personal_expense_for: ''
   });
 
+  const isSingleParticipant = config?.participants?.length === 1;
+
   // 환율 상태
   const [exchangeRates, setExchangeRates] = useState({
     JPY: 9.5,
@@ -802,18 +804,27 @@ function App() {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>지불한 사람</label>
-                  <select
-                    name="payer"
-                    value={formData.payer}
-                    onChange={handleInputChange}
-                    required
-                  >
-                    <option value="">선택하세요</option>
-                    {config?.participants?.map(p => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
+                  <label>{isSingleParticipant ? '정산책임자' : '지불한 사람'}</label>
+                  {isSingleParticipant ? (
+                    <input
+                      type="text"
+                      value={config.participants[0]}
+                      readOnly
+                      className="readonly-input"
+                    />
+                  ) : (
+                    <select
+                      name="payer"
+                      value={formData.payer}
+                      onChange={handleInputChange}
+                      required
+                    >
+                      <option value="">선택하세요</option>
+                      {config?.participants?.map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
 
@@ -828,38 +839,40 @@ function App() {
                 />
               </div>
 
-              <div className="form-group expense-type-group">
-                <label>지출 유형</label>
-                <div className="expense-type-options">
-                  <label className={`expense-type-option ${!formData.is_personal_expense ? 'selected' : ''}`}>
-                    <input
-                      type="radio"
-                      name="expense_type"
-                      checked={!formData.is_personal_expense}
-                      onChange={() => setFormData(prev => ({ 
-                        ...prev, 
-                        is_personal_expense: false,
-                        personal_expense_for: ''
-                      }))}
-                    />
-                    <span className="expense-type-label">👥 공동 경비</span>
-                  </label>
-                  <label className={`expense-type-option ${formData.is_personal_expense ? 'selected' : ''}`}>
-                    <input
-                      type="radio"
-                      name="expense_type"
-                      checked={formData.is_personal_expense}
-                      onChange={() => setFormData(prev => ({ 
-                        ...prev, 
-                        is_personal_expense: true 
-                      }))}
-                    />
-                    <span className="expense-type-label">👤 개인 지출</span>
-                  </label>
+              {!isSingleParticipant && (
+                <div className="form-group expense-type-group">
+                  <label>지출 유형</label>
+                  <div className="expense-type-options">
+                    <label className={`expense-type-option ${!formData.is_personal_expense ? 'selected' : ''}`}>
+                      <input
+                        type="radio"
+                        name="expense_type"
+                        checked={!formData.is_personal_expense}
+                        onChange={() => setFormData(prev => ({ 
+                          ...prev, 
+                          is_personal_expense: false,
+                          personal_expense_for: ''
+                        }))}
+                      />
+                      <span className="expense-type-label">👥 공동 경비</span>
+                    </label>
+                    <label className={`expense-type-option ${formData.is_personal_expense ? 'selected' : ''}`}>
+                      <input
+                        type="radio"
+                        name="expense_type"
+                        checked={formData.is_personal_expense}
+                        onChange={() => setFormData(prev => ({ 
+                          ...prev, 
+                          is_personal_expense: true 
+                        }))}
+                      />
+                      <span className="expense-type-label">👤 개인 지출</span>
+                    </label>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {formData.is_personal_expense && (
+              {!isSingleParticipant && formData.is_personal_expense && (
                 <div className="form-group personal-expense-for">
                   <label>개인 지출 해당자</label>
                   <select
@@ -888,7 +901,7 @@ function App() {
               className="card-title card-title-toggle"
               onClick={() => setIsExchangeCardOpen(prev => !prev)}
             >
-              <span className={`card-toggle-chevron ${isExchangeCardOpen ? 'open' : ''}`}>▶</span>
+              <span className={`card-toggle-chevron chevron-exchange ${isExchangeCardOpen ? 'open' : ''}`}>▶</span>
               <span>💱</span> 환율 설정
               <span className="card-title-badge">현찰살때</span>
               <button 
@@ -962,7 +975,7 @@ function App() {
               className="card-title card-title-toggle"
               onClick={() => setIsExpenseListOpen(prev => !prev)}
             >
-              <span className={`card-toggle-chevron ${isExpenseListOpen ? 'open' : ''}`}>▶</span>
+              <span className={`card-toggle-chevron chevron-expense ${isExpenseListOpen ? 'open' : ''}`}>▶</span>
               <span>📋</span> 경비 내역
               {expenses.length > 0 && (
                 <span className="card-title-badge" style={{ background: 'rgba(46, 204, 113, 0.15)', color: 'var(--accent-green)' }}>
@@ -1061,6 +1074,12 @@ function App() {
                   + {expenses.length - 1}건 더보기
                 </div>
               )}
+              {isExpenseListOpen && expenses.length > 1 && (
+                <div className="collapse-bottom-btn" onClick={() => setIsExpenseListOpen(false)}>
+                  <span className="card-toggle-chevron chevron-expense open">▶</span>
+                  접기
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1069,22 +1088,6 @@ function App() {
       {/* 요약 섹션 */}
       {summary && (
         <>
-        <div className="report-actions">
-          <button 
-            className="btn btn-download" 
-            onClick={handleDownloadReport}
-            disabled={loading || expenses.length === 0}
-          >
-            {loading ? '다운로드 중...' : '📊 엑셀로 다운로드'}
-          </button>
-          <button 
-            className="btn btn-download btn-download-receipt" 
-            onClick={handleDownloadReceipts}
-            disabled={loading || expenses.length === 0}
-          >
-            {loading ? '다운로드 중...' : '🧾 영수증 첨부 다운로드'}
-          </button>
-        </div>
         <div className="summary-grid">
           <div className="summary-card total">
             <h3>💰 총 경비</h3>
@@ -1104,16 +1107,18 @@ function App() {
             </div>
           </div>
           
-          <div className="summary-card per-person">
-            <h3>👥 1인당 분담액</h3>
-            <div className="value">
-              {formatAmount(summary.per_person)}
-              <span className="unit">원</span>
+          {!isSingleParticipant && (
+            <div className="summary-card per-person">
+              <h3>👥 1인당 분담액</h3>
+              <div className="value">
+                {formatAmount(summary.per_person)}
+                <span className="unit">원</span>
+              </div>
+              <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                {summary.num_participants}명 기준 (공동 경비만)
+              </p>
             </div>
-            <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              {summary.num_participants}명 기준 (공동 경비만)
-            </p>
-          </div>
+          )}
 
           <div className="summary-card">
             <h3>📊 카테고리별 지출</h3>
@@ -1141,46 +1146,65 @@ function App() {
           </div>
         </div>
 
-        <div className="summary-card settlement-card-full">
-          <h3>💸 정산 내역</h3>
-            <div className="settlements">
-              {summary.settlements && Object.entries(summary.settlements).map(([name, data]) => (
-                <div 
-                  key={name} 
-                  className={`settlement-item ${data.difference > 0 ? 'pay' : data.difference < 0 ? 'receive' : 'settled'}`}
-                >
-                  <div className="settlement-info">
-                    <div className="settlement-name">{name}</div>
-                    <div className="settlement-paid">공동 경비 지불: ₩{formatAmount(data.paid)}</div>
-                    {data.paid_for_others > 0 && (
-                      <div className="settlement-paid-for-others">타인 개인지출 대납: ₩{formatAmount(data.paid_for_others)}</div>
-                    )}
-                    {data.personal_expense > 0 && (
-                      <div className="settlement-personal">
-                        <span className="personal-label">👤 개인 지출: ₩{formatAmount(data.personal_expense)}</span>
-                        {data.personal_expense_details && data.personal_expense_details.length > 0 && (
-                          <div className="personal-expense-details">
-                            {data.personal_expense_details.map((detail, idx) => (
-                              <div key={idx} className="personal-expense-detail-item">
-                                <span className="detail-amount">₩{formatAmount(detail.amount)}</span>
-                                <span className="detail-payer">{detail.payer} 결제</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="settlement-amount">
-                    <div className={`diff ${data.difference > 0 ? 'negative' : data.difference < 0 ? 'positive' : ''}`}>
-                      {data.difference > 0 ? '+' : ''}{formatAmount(data.difference)}원
+        {!isSingleParticipant && (
+          <div className="summary-card settlement-card-full">
+            <h3>💸 정산 내역</h3>
+              <div className="settlements">
+                {summary.settlements && Object.entries(summary.settlements).map(([name, data]) => (
+                  <div 
+                    key={name} 
+                    className={`settlement-item ${data.difference > 0 ? 'pay' : data.difference < 0 ? 'receive' : 'settled'}`}
+                  >
+                    <div className="settlement-info">
+                      <div className="settlement-name">{name}</div>
+                      <div className="settlement-paid">공동 경비 지불: ₩{formatAmount(data.paid)}</div>
+                      {data.paid_for_others > 0 && (
+                        <div className="settlement-paid-for-others">타인 개인지출 대납: ₩{formatAmount(data.paid_for_others)}</div>
+                      )}
+                      {data.personal_expense > 0 && (
+                        <div className="settlement-personal">
+                          <span className="personal-label">👤 개인 지출: ₩{formatAmount(data.personal_expense)}</span>
+                          {data.personal_expense_details && data.personal_expense_details.length > 0 && (
+                            <div className="personal-expense-details">
+                              {data.personal_expense_details.map((detail, idx) => (
+                                <div key={idx} className="personal-expense-detail-item">
+                                  <span className="detail-amount">₩{formatAmount(detail.amount)}</span>
+                                  <span className="detail-payer">{detail.payer} 결제</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div className="status">{data.status}</div>
+                    <div className="settlement-amount">
+                      <div className={`diff ${data.difference > 0 ? 'negative' : data.difference < 0 ? 'positive' : ''}`}>
+                        {data.difference > 0 ? '+' : ''}{formatAmount(data.difference)}원
+                      </div>
+                      <div className="status">{data.status}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+        )}
+
+        <div className="report-actions">
+          <button 
+            className="btn btn-download" 
+            onClick={handleDownloadReport}
+            disabled={loading || expenses.length === 0}
+          >
+            {loading ? '다운로드 중...' : '📊 엑셀로 다운로드'}
+          </button>
+          <button 
+            className="btn btn-download btn-download-receipt" 
+            onClick={handleDownloadReceipts}
+            disabled={loading || expenses.length === 0}
+          >
+            {loading ? '다운로드 중...' : '🧾 영수증 첨부 다운로드'}
+          </button>
+        </div>
         </>
       )}
 
@@ -1233,7 +1257,9 @@ function App() {
                       onChange={handleSettingsChange}
                       placeholder="예: 홍길동, 김철수, 이영희"
                     />
-                    <small className="form-hint">정산에 참여할 사람들의 이름을 쉼표로 구분하여 입력하세요</small>
+                    <small className="form-hint">- 정산에 참여할 사람들의 이름을 쉼표로 구분하여 입력하세요</small>
+                    <small className="form-hint">- 경비를 주로 집행할 분의 성함을 맨 앞에 입력해주세요.</small>
+                    <small className="form-hint" style={{color: 'orange'}}>* 참가자를 한 사람만 입력하면, 총무 1인용 정산 도구가 됩니다.</small>
                   </div>
                   
                   <div className="form-group">
@@ -1245,7 +1271,7 @@ function App() {
                       onChange={handleSettingsChange}
                       placeholder="예: 교통비, 식사비, 숙박비, 기타"
                     />
-                    <small className="form-hint">지출 분류를 쉼표로 구분하여 입력하세요</small>
+                    <small className="form-hint">- 지출 분류를 쉼표로 구분하여 입력하세요. <br/>- AI가 자동으로 분류해드립니다.</small>
                   </div>
                   
                   <div className="form-group">
@@ -1260,7 +1286,7 @@ function App() {
                       max="10"
                       placeholder="2.5"
                     />
-                    <small className="form-hint">해외 결제 시 추가되는 수수료율을 입력하세요</small>
+                    <small className="form-hint">- 해외 결제 시 추가되는 수수료율을 입력하세요</small>
                   </div>
                   
                   <div className="form-group">
@@ -1272,7 +1298,7 @@ function App() {
                       onChange={handleSettingsChange}
                       placeholder="AIza..."
                     />
-                    <small className="form-hint">영수증 OCR 분석을 위한 Google API 키를 입력하세요 (Gemini 2.5 Flash)</small>
+                    <small className="form-hint">- 영수증 OCR 분석을 위한 Google API 키를 입력하세요 (Gemini 2.5 Flash)</small>
                   </div>
                   
                   <div className="form-group">
@@ -1285,8 +1311,8 @@ function App() {
                       placeholder="API 키 입력..."
                     />
                     <small className="form-hint">
-                      공식 환율 데이터를 위한 API 키입니다. 미입력시 무료 API로 자동 대체됩니다.
-                      <a href="https://www.koreaexim.go.kr/ir/HPHKIR020M01?apino=2&viewtype=C#tab2" 
+                      - 공식 환율 데이터를 위한 API 키입니다. 미입력시 무료 API로 자동 대체됩니다.
+                      <a href="https://www.koreaexim.go.kr/ir/HPHKIR019M01#tab1" 
                          target="_blank" rel="noopener noreferrer"
                          style={{ marginLeft: '4px', color: 'var(--accent)' }}>
                         무료 발급
@@ -1299,7 +1325,7 @@ function App() {
                       ✨ 새 여행 시작하기
                     </button>
                     <small className="form-hint" style={{ textAlign: 'center', display: 'block', marginTop: '0.5rem' }}>
-                      현재 여행을 저장하고 새로운 여행을 시작합니다
+                      - 현재 여행을 저장하고 새로운 여행을 시작합니다
                     </small>
                   </div>
                 </>
