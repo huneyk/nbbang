@@ -1044,20 +1044,29 @@ def download_report():
 
 def _register_korean_font():
     """한글 폰트를 등록합니다. macOS/Linux/Windows 순으로 탐색합니다."""
-    font_paths = [
-        '/System/Library/Fonts/AppleSDGothicNeo.ttc',
-        '/System/Library/Fonts/Supplemental/AppleGothic.ttf',
-        '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
-        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
-        'C:/Windows/Fonts/malgun.ttf',
+    font_candidates = [
+        ('/Library/Fonts/Arial Unicode.ttf', None),
+        ('/System/Library/Fonts/Supplemental/AppleGothic.ttf', None),
+        ('/System/Library/Fonts/Supplemental/NotoSansGothic-Regular.ttf', None),
+        ('/usr/share/fonts/truetype/nanum/NanumGothic.ttf', None),
+        ('/usr/share/fonts/truetype/noto/NotoSansCJKkr-Regular.otf', None),
+        ('C:/Windows/Fonts/malgun.ttf', None),
+        ('/System/Library/Fonts/AppleSDGothicNeo.ttc', 0),
     ]
-    for path in font_paths:
-        if os.path.exists(path):
-            try:
+    for path, subfont_idx in font_candidates:
+        if not os.path.exists(path):
+            continue
+        try:
+            if subfont_idx is not None:
+                pdfmetrics.registerFont(TTFont('Korean', path, subfontIndex=subfont_idx))
+            else:
                 pdfmetrics.registerFont(TTFont('Korean', path))
-                return 'Korean'
-            except Exception:
-                continue
+            logger.info(f"한글 폰트 등록 성공: {path}")
+            return 'Korean'
+        except Exception as e:
+            logger.warning(f"폰트 로드 실패 ({path}): {e}")
+            continue
+    logger.error("한글 폰트를 찾을 수 없습니다. Helvetica를 사용합니다.")
     return 'Helvetica'
 
 
@@ -1098,27 +1107,27 @@ def download_receipt_report():
     img_col_w = cell_w * 0.52 - 2 * mm
 
     field_label_style = ParagraphStyle(
-        'FieldLabel', fontName=korean_font, fontSize=6.5,
-        leading=8, textColor=HexColor('#2d5016'),
-        spaceBefore=0.8 * mm, spaceAfter=0.8 * mm,
+        'FieldLabel', fontName=korean_font, fontSize=8,
+        leading=10, textColor=HexColor('#2d5016'),
+        spaceBefore=0.5 * mm, spaceAfter=0.5 * mm,
     )
     field_value_style = ParagraphStyle(
-        'FieldValue', fontName=korean_font, fontSize=6,
-        leading=7.5, textColor=HexColor('#333333'),
-        spaceBefore=0.8 * mm, spaceAfter=0.8 * mm,
+        'FieldValue', fontName=korean_font, fontSize=7.5,
+        leading=9.5, textColor=HexColor('#333333'),
+        spaceBefore=0.5 * mm, spaceAfter=0.5 * mm,
     )
     no_receipt_style = ParagraphStyle(
-        'NoReceipt', fontName=korean_font, fontSize=7,
-        leading=10, textColor=HexColor('#aaaaaa'),
+        'NoReceipt', fontName=korean_font, fontSize=9,
+        leading=12, textColor=HexColor('#aaaaaa'),
         alignment=1,
     )
     title_style = ParagraphStyle(
-        'ReceiptTitle', fontName=korean_font, fontSize=11,
-        leading=14, textColor=HexColor('#1a1a2e'),
+        'ReceiptTitle', fontName=korean_font, fontSize=13,
+        leading=17, textColor=HexColor('#1a1a2e'),
     )
     subtitle_style = ParagraphStyle(
-        'ReceiptSubtitle', fontName=korean_font, fontSize=7,
-        leading=10, textColor=HexColor('#888888'),
+        'ReceiptSubtitle', fontName=korean_font, fontSize=8,
+        leading=11, textColor=HexColor('#888888'),
         spaceAfter=2 * mm,
     )
 
