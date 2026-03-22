@@ -934,80 +934,83 @@ function App() {
               )}
             </h2>
             
-            {isExpenseListOpen && (
-              <div className="card-collapsible-body">
-                <div className="expense-table-wrapper">
-                  {expenses.length === 0 ? (
-                    <div className="empty-state">
-                      <span>📝</span>
-                      <p>등록된 경비가 없습니다.</p>
-                      <p style={{ fontSize: '0.9rem' }}>영수증을 업로드하거나 직접 입력해주세요.</p>
-                    </div>
-                  ) : (
-                    <table className="expense-table">
-                      <thead>
-                        <tr>
-                          <th>날짜</th>
-                          <th>지출 항목</th>
-                          <th>금액</th>
-                          <th>결제수단</th>
-                          <th>적용 환율</th>
-                          <th>원화 환산액</th>
-                          <th>세부 내역</th>
-                          <th>지불한 사람</th>
-                          <th>유형</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {expenses.map(expense => (
-                          <tr key={expense._id} className={expense.is_personal_expense ? 'personal-expense-row' : ''}>
-                            <td data-label="날짜">{expense.date}</td>
-                            <td data-label="지출 항목">
-                              <span className="badge badge-category">{expense.category}</span>
-                            </td>
-                            <td data-label="금액" className="amount">
-                              {formatAmount(expense.amount)} {expense.currency}
-                            </td>
-                            <td data-label="결제수단">
-                              <span className={`badge ${expense.payment_method === '현금' ? 'badge-cash' : 'badge-card'}`}>
-                                {expense.payment_method === '현금' ? '💵' : '💳'} {expense.payment_method}
+            <div className="card-collapsible-body">
+              <div className="expense-table-wrapper">
+                {expenses.length === 0 ? (
+                  <div className="empty-state">
+                    <span>📝</span>
+                    <p>등록된 경비가 없습니다.</p>
+                    <p style={{ fontSize: '0.9rem' }}>영수증을 업로드하거나 직접 입력해주세요.</p>
+                  </div>
+                ) : (
+                  <table className="expense-table">
+                    <thead>
+                      <tr>
+                        <th>날짜</th>
+                        <th>지출 항목</th>
+                        <th>금액</th>
+                        <th>결제수단</th>
+                        <th>적용 환율</th>
+                        <th>원화 환산액</th>
+                        <th>세부 내역</th>
+                        <th>지불한 사람</th>
+                        <th>유형</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(isExpenseListOpen ? expenses : expenses.slice(0, 1)).map(expense => (
+                        <tr key={expense._id} className={expense.is_personal_expense ? 'personal-expense-row' : ''}>
+                          <td data-label="날짜">{expense.date}</td>
+                          <td data-label="지출 항목">
+                            <span className="badge badge-category">{expense.category}</span>
+                          </td>
+                          <td data-label="금액" className="amount">
+                            {formatAmount(expense.amount)} {expense.currency}
+                          </td>
+                          <td data-label="결제수단">
+                            <span className={`badge ${expense.payment_method === '현금' ? 'badge-cash' : 'badge-card'}`}>
+                              {expense.payment_method === '현금' ? '💵' : '💳'} {expense.payment_method}
+                            </span>
+                          </td>
+                          <td data-label="적용 환율" className="amount exchange-rate">
+                            {expense.exchange_rate ? expense.exchange_rate.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}
+                          </td>
+                          <td data-label="원화 환산액" className="amount krw-amount">
+                            ₩{formatAmount(expense.krw_amount)}
+                          </td>
+                          <td data-label="세부 내역">{expense.description || '-'}</td>
+                          <td data-label="지불한 사람">{expense.payer}</td>
+                          <td data-label="유형">
+                            {expense.is_personal_expense ? (
+                              <span className="badge badge-personal" title={`${expense.personal_expense_for}의 개인 지출`}>
+                                👤 {expense.personal_expense_for}
                               </span>
-                            </td>
-                            <td data-label="적용 환율" className="amount exchange-rate">
-                              {expense.exchange_rate ? expense.exchange_rate.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}
-                            </td>
-                            <td data-label="원화 환산액" className="amount krw-amount">
-                              ₩{formatAmount(expense.krw_amount)}
-                            </td>
-                            <td data-label="세부 내역">{expense.description || '-'}</td>
-                            <td data-label="지불한 사람">{expense.payer}</td>
-                            <td data-label="유형">
-                              {expense.is_personal_expense ? (
-                                <span className="badge badge-personal" title={`${expense.personal_expense_for}의 개인 지출`}>
-                                  👤 {expense.personal_expense_for}
-                                </span>
-                              ) : (
-                                <span className="badge badge-shared">👥 공동</span>
-                              )}
-                            </td>
-                            <td>
-                              <button 
-                                className="delete-btn"
-                                onClick={() => handleDelete(expense._id)}
-                                title="삭제"
-                              >
-                                🗑️
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
+                            ) : (
+                              <span className="badge badge-shared">👥 공동</span>
+                            )}
+                          </td>
+                          <td>
+                            <button 
+                              className="delete-btn"
+                              onClick={() => handleDelete(expense._id)}
+                              title="삭제"
+                            >
+                              🗑️
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
-            )}
+              {!isExpenseListOpen && expenses.length > 1 && (
+                <div className="collapsed-hint" onClick={() => setIsExpenseListOpen(true)}>
+                  + {expenses.length - 1}건 더보기
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -126,7 +126,7 @@ def get_receipt_image(receipt_id: str):
 def get_expenses():
     """모든 경비 내역을 조회합니다."""
     db = get_database()
-    expenses = list(db.expenses.find().sort('date', -1))
+    expenses = list(db.expenses.find().sort('created_at', -1))
     
     return jsonify({
         'success': True,

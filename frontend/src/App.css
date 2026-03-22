@@ -333,6 +333,21 @@ body {
   overflow-x: auto;
 }
 
+.collapsed-hint {
+  text-align: center;
+  padding: 0.75rem;
+  color: var(--accent-green);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-top: 1px dashed var(--border-color);
+  transition: background 0.2s;
+}
+
+.collapsed-hint:hover {
+  background: rgba(46, 204, 113, 0.08);
+}
+
 .expense-table {
   width: 100%;
   border-collapse: collapse;
