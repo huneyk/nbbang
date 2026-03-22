@@ -11,12 +11,12 @@ logger = logging.getLogger(__name__)
 
 # 현찰살때 스프레드 (매매기준율 대비)
 CASH_BUY_SPREADS = {
-    'USD': 0.0175,
+    'USD': 0.022,
     'JPY': 0.0175,
-    'EUR': 0.020,
+    'EUR': 0.023,
     'GBP': 0.020,
-    'CNY': 0.050,
-    'HKD': 0.020,
+    'CNY': 0.060,
+    'HKD': 0.024,
     'AUD': 0.020,
     'CAD': 0.020,
     'CHF': 0.020,
@@ -59,7 +59,7 @@ CURRENCY_INFO = {
 
 def _apply_cash_buy_spread(base_rate: float, currency_code: str) -> float:
     spread = CASH_BUY_SPREADS.get(currency_code, DEFAULT_SPREAD)
-    return round(base_rate * (1 + spread), 2)
+    return round(base_rate * (1 + spread * 1.005), 2)
 
 
 def _fetch_from_koreaexim(api_key: str, target_currencies: List[str]) -> Tuple[Dict, str]:
