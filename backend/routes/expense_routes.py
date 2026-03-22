@@ -2,12 +2,21 @@ import os
 import io
 import uuid
 import logging
+import tempfile
 from datetime import datetime
 from flask import Blueprint, request, jsonify, make_response
 from werkzeug.utils import secure_filename
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.lib.colors import HexColor
+from reportlab.platypus import SimpleDocTemplate, Image as RLImage, Spacer, Table, TableStyle, Paragraph, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from PIL import Image as PILImage
 from config import Config
 from models.expense import Expense
 from services.ocr_service import analyze_receipt_with_gemini, calculate_krw_amount
@@ -16,7 +25,7 @@ from services.database import (
     list_trips, archive_current_trip, create_new_trip, load_trip, delete_trip
 )
 from services.image_service import (
-    resize_image, get_image_info,
+    get_image_info,
     fix_orientation_only, crop_receipt, downsize_for_storage
 )
 from services.receipt_storage import (
@@ -37,7 +46,7 @@ def allowed_file(filename: str) -> bool:
 
 @expense_bp.route('/api/upload-receipt', methods=['POST'])
 def upload_receipt():
-    """영수증 이미지를 업로드하고 자동 crop → downsize → GridFS 저장 → OCR 분석을 수행합니다."""
+    """영수증 이미지를 업로드하고 자동 crop → downsize → OCR 분석 → GridFS 저장을 수행합니다."""
     if 'receipt' not in request.files:
         return jsonify({'success': False, 'error': '파일이 없습니다.'}), 400
 
@@ -59,10 +68,9 @@ def upload_receipt():
     temp_path = os.path.join(upload_folder, f"temp_{base_id}")
     oriented_path = os.path.join(upload_folder, f"oriented_{base_id}.jpg")
     cropped_path = os.path.join(upload_folder, f"cropped_{base_id}.jpg")
-    ocr_path = os.path.join(upload_folder, f"ocr_{base_id}.jpg")
     storage_path = os.path.join(upload_folder, f"storage_{base_id}.jpg")
 
-    temp_files = [temp_path, oriented_path, cropped_path, ocr_path, storage_path]
+    temp_files = [temp_path, oriented_path, cropped_path, storage_path]
 
     file.save(temp_path)
 
@@ -79,12 +87,11 @@ def upload_receipt():
         is_cropped = crop_receipt(oriented_path, cropped_path)
         logger.info(f"영수증 자동 crop: {'성공' if is_cropped else '윤곽 미감지 (원본 사용)'}")
 
-        # 3) OCR용 리사이즈 (max 4000px) 후 분석
-        resize_image(cropped_path, ocr_path)
-        result = analyze_receipt_with_gemini(ocr_path)
-
-        # 4) 저장용 다운사이즈 (max 1500px, max 500KB)
+        # 3) 저장용 다운사이즈 (max 1500px, max 500KB)
         downsize_for_storage(cropped_path, storage_path)
+
+        # 4) Gemini OCR 분석 (다운사이즈된 이미지 사용)
+        result = analyze_receipt_with_gemini(storage_path)
 
         # 5) MongoDB GridFS에 저장
         storage_filename = f"{base_id}_{base_name}.jpg"
@@ -1032,4 +1039,266 @@ def download_report():
     response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     response.headers['Content-Disposition'] = f'attachment; filename={filename}'
     
+    return response
+
+
+def _register_korean_font():
+    """한글 폰트를 등록합니다. macOS/Linux/Windows 순으로 탐색합니다."""
+    font_paths = [
+        '/System/Library/Fonts/AppleSDGothicNeo.ttc',
+        '/System/Library/Fonts/Supplemental/AppleGothic.ttf',
+        '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+        'C:/Windows/Fonts/malgun.ttf',
+    ]
+    for path in font_paths:
+        if os.path.exists(path):
+            try:
+                pdfmetrics.registerFont(TTFont('Korean', path))
+                return 'Korean'
+            except Exception:
+                continue
+    return 'Helvetica'
+
+
+@expense_bp.route('/api/report/download-receipts', methods=['GET'])
+def download_receipt_report():
+    """모든 경비 내역을 2x5 그리드로 정리하여 PDF로 다운로드합니다.
+    각 셀: 왼쪽에 경비 정보 라벨, 오른쪽에 영수증 이미지.
+    영수증이 없는 항목은 '영수증 없음'으로 표시됩니다."""
+    db = get_database()
+    expenses = list(db.expenses.find().sort('date', 1))
+    settings = load_settings()
+    trip_title = settings.get('trip_title', '여행 경비 정산')
+
+    if not expenses:
+        return jsonify({
+            'success': False,
+            'error': '경비 내역이 없습니다.'
+        }), 400
+
+    korean_font = _register_korean_font()
+    receipt_count = sum(1 for e in expenses if e.get('receipt_image'))
+
+    page_w, page_h = A4
+    margin = 10 * mm
+    usable_w = page_w - 2 * margin
+    usable_h = page_h - 2 * margin
+
+    grid_cols = 2
+    rows_per_page = 5
+    col_gap = 4 * mm
+    row_gap = 2 * mm
+
+    cell_w = (usable_w - col_gap * (grid_cols - 1)) / grid_cols
+    title_h = 16 * mm
+    cell_h = (usable_h - title_h - row_gap * (rows_per_page - 1)) / rows_per_page
+
+    label_col_w = cell_w * 0.48
+    img_col_w = cell_w * 0.52 - 2 * mm
+
+    field_label_style = ParagraphStyle(
+        'FieldLabel', fontName=korean_font, fontSize=6.5,
+        leading=8, textColor=HexColor('#2d5016'),
+        spaceBefore=0.8 * mm, spaceAfter=0.8 * mm,
+    )
+    field_value_style = ParagraphStyle(
+        'FieldValue', fontName=korean_font, fontSize=6,
+        leading=7.5, textColor=HexColor('#333333'),
+        spaceBefore=0.8 * mm, spaceAfter=0.8 * mm,
+    )
+    no_receipt_style = ParagraphStyle(
+        'NoReceipt', fontName=korean_font, fontSize=7,
+        leading=10, textColor=HexColor('#aaaaaa'),
+        alignment=1,
+    )
+    title_style = ParagraphStyle(
+        'ReceiptTitle', fontName=korean_font, fontSize=11,
+        leading=14, textColor=HexColor('#1a1a2e'),
+    )
+    subtitle_style = ParagraphStyle(
+        'ReceiptSubtitle', fontName=korean_font, fontSize=7,
+        leading=10, textColor=HexColor('#888888'),
+        spaceAfter=2 * mm,
+    )
+
+    field_labels = [
+        '날짜', '지출 항목', '금액', '결제수단',
+        '적용 환율', '원화 환산액', '세부 내역', '지불한 사람',
+    ]
+
+    output = io.BytesIO()
+    doc = SimpleDocTemplate(
+        output, pagesize=A4,
+        leftMargin=margin, rightMargin=margin,
+        topMargin=margin, bottomMargin=margin,
+    )
+
+    elements = []
+    temp_files = []
+
+    try:
+        cells = []
+        for exp in expenses:
+            receipt_id = exp.get('receipt_image')
+            img_path = None
+
+            if receipt_id:
+                grid_out = get_receipt_from_gridfs(receipt_id)
+                if grid_out is not None:
+                    tmp = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+                    tmp.write(grid_out.read())
+                    tmp.flush()
+                    tmp.close()
+                    temp_files.append(tmp.name)
+                    img_path = tmp.name
+
+            date_str = exp.get('date', '')
+            category = exp.get('category', '')
+            amount_val = exp.get('amount', 0)
+            currency = exp.get('currency', 'KRW')
+            krw_amount = exp.get('krw_amount', 0)
+            description = exp.get('description', '')
+            payer = exp.get('payer', '')
+            payment_method = exp.get('payment_method', '')
+
+            exchange_rate_val = exp.get('exchange_rate')
+            if exchange_rate_val is None and amount_val and krw_amount and amount_val != 0:
+                exchange_rate_val = round(krw_amount / amount_val, 2)
+            exchange_str = f"{exchange_rate_val:,.2f}" if exchange_rate_val else ''
+
+            amount_str = f"{amount_val:,.0f} {currency}"
+            krw_str = f"₩{krw_amount:,.0f}"
+            desc_short = description[:15] + ('…' if len(description) > 15 else '') if description else ''
+
+            field_values = [
+                date_str, category, amount_str, payment_method,
+                exchange_str, krw_str, desc_short, payer,
+            ]
+
+            label_rows = []
+            for lbl, val in zip(field_labels, field_values):
+                label_rows.append([
+                    Paragraph(lbl, field_label_style),
+                    Paragraph(str(val), field_value_style),
+                ])
+
+            inner_h = cell_h - 2 * mm
+            row_h = inner_h / len(field_labels)
+            label_name_w = label_col_w * 0.48
+            label_val_w = label_col_w * 0.52
+
+            info_table = Table(
+                label_rows,
+                colWidths=[label_name_w, label_val_w],
+                rowHeights=[row_h] * len(field_labels),
+            )
+            info_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 1 * mm),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0.5 * mm),
+                ('TOPPADDING', (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ]))
+
+            if img_path:
+                try:
+                    pil_img = PILImage.open(img_path)
+                    orig_w, orig_h = pil_img.size
+                    pil_img.close()
+                except Exception:
+                    orig_w, orig_h = 300, 400
+
+                scale = min(img_col_w / orig_w, inner_h / orig_h)
+                draw_w = orig_w * scale
+                draw_h = orig_h * scale
+                img_element = RLImage(img_path, width=draw_w, height=draw_h)
+            else:
+                placeholder = Table(
+                    [[Paragraph('영수증 없음', no_receipt_style)]],
+                    colWidths=[img_col_w],
+                    rowHeights=[inner_h],
+                )
+                placeholder.setStyle(TableStyle([
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('BACKGROUND', (0, 0), (-1, -1), HexColor('#f5f5f5')),
+                ]))
+                img_element = placeholder
+
+            cell_content = Table(
+                [[info_table, img_element]],
+                colWidths=[label_col_w, img_col_w],
+                rowHeights=[inner_h],
+            )
+            cell_content.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                ('TOPPADDING', (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+                ('BOX', (0, 0), (-1, -1), 0.5, HexColor('#cccccc')),
+            ]))
+            cells.append(cell_content)
+
+        items_per_page = grid_cols * rows_per_page
+        total_pages = (len(cells) + items_per_page - 1) // items_per_page
+
+        for page_idx in range(total_pages):
+            if page_idx > 0:
+                elements.append(PageBreak())
+
+            elements.append(Paragraph(f'{trip_title} - 영수증 첨부', title_style))
+            elements.append(Paragraph(
+                f"생성일: {datetime.now().strftime('%Y-%m-%d %H:%M')}  |  "
+                f"총 {len(expenses)}건 (영수증 {receipt_count}건)  |  "
+                f"페이지 {page_idx + 1}/{total_pages}",
+                subtitle_style,
+            ))
+
+            start = page_idx * items_per_page
+            page_cells = cells[start:start + items_per_page]
+
+            page_grid_rows = []
+            for r in range(rows_per_page):
+                row_cells = []
+                for c in range(grid_cols):
+                    idx = r * grid_cols + c
+                    if idx < len(page_cells):
+                        row_cells.append(page_cells[idx])
+                    else:
+                        row_cells.append('')
+                page_grid_rows.append(row_cells)
+
+            grid_table = Table(
+                page_grid_rows,
+                colWidths=[cell_w] * grid_cols,
+                rowHeights=[cell_h] * rows_per_page,
+                hAlign='CENTER',
+            )
+            grid_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), col_gap / 2),
+                ('RIGHTPADDING', (0, 0), (-1, -1), col_gap / 2),
+                ('TOPPADDING', (0, 0), (-1, -1), row_gap / 2),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), row_gap / 2),
+            ]))
+            elements.append(grid_table)
+
+        doc.build(elements)
+
+    finally:
+        for fp in temp_files:
+            try:
+                os.unlink(fp)
+            except OSError:
+                pass
+
+    output.seek(0)
+    filename = f"receipts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'attachment; filename={filename}'
     return response

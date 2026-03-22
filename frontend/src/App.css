@@ -926,6 +926,7 @@ body {
 .report-actions {
   display: flex;
   justify-content: center;
+  gap: 1rem;
   margin: 2rem 0;
 }
 
@@ -937,9 +938,18 @@ body {
   box-shadow: 0 4px 20px rgba(0, 217, 165, 0.3);
 }
 
+.btn-download-receipt {
+  background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+  box-shadow: 0 4px 20px rgba(108, 92, 231, 0.3);
+}
+
 .btn-download:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 25px rgba(0, 217, 165, 0.5);
+}
+
+.btn-download-receipt:hover {
+  box-shadow: 0 6px 25px rgba(108, 92, 231, 0.5);
 }
 
 .btn-download:disabled {
@@ -1604,6 +1614,7 @@ body {
 
   .report-actions {
     margin: 1.5rem 0;
+    flex-direction: column;
   }
 
   .btn-download {

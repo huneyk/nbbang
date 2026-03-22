@@ -594,7 +594,7 @@ function App() {
     return new Intl.NumberFormat('ko-KR').format(Math.round(amount));
   };
 
-  // 리포트 다운로드
+  // 엑셀 리포트 다운로드
   const handleDownloadReport = async () => {
     try {
       setLoading(true);
@@ -602,13 +602,11 @@ function App() {
       const response = await fetch(`${API_BASE}/api/report/download`);
       const blob = await response.blob();
       
-      // 파일명 생성
       const now = new Date();
       const dateStr = now.toISOString().slice(0,10).replace(/-/g, '');
       const timeStr = now.toTimeString().slice(0,8).replace(/:/g, '');
       const filename = `expense_${dateStr}_${timeStr}.xlsx`;
       
-      // 다운로드 링크 생성
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -618,10 +616,48 @@ function App() {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
       
-      showToast('리포트가 다운로드되었습니다!');
+      showToast('엑셀 리포트가 다운로드되었습니다!');
     } catch (error) {
       console.error('리포트 다운로드 오류:', error);
       showToast('리포트 다운로드에 실패했습니다.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 영수증 첨부 PDF 다운로드
+  const handleDownloadReceipts = async () => {
+    try {
+      setLoading(true);
+      
+      const response = await fetch(`${API_BASE}/api/report/download-receipts`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        showToast(errorData.error || '영수증 다운로드에 실패했습니다.', 'error');
+        return;
+      }
+      
+      const blob = await response.blob();
+      
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0,10).replace(/-/g, '');
+      const timeStr = now.toTimeString().slice(0,8).replace(/:/g, '');
+      const filename = `receipts_${dateStr}_${timeStr}.pdf`;
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      showToast('영수증 PDF가 다운로드되었습니다!');
+    } catch (error) {
+      console.error('영수증 다운로드 오류:', error);
+      showToast('영수증 다운로드에 실패했습니다.', 'error');
     } finally {
       setLoading(false);
     }
@@ -1039,7 +1075,14 @@ function App() {
             onClick={handleDownloadReport}
             disabled={loading || expenses.length === 0}
           >
-            {loading ? '다운로드 중...' : '📥 경비 리포트 다운로드 (Excel)'}
+            {loading ? '다운로드 중...' : '📊 엑셀로 다운로드'}
+          </button>
+          <button 
+            className="btn btn-download btn-download-receipt" 
+            onClick={handleDownloadReceipts}
+            disabled={loading || expenses.length === 0}
+          >
+            {loading ? '다운로드 중...' : '🧾 영수증 첨부 다운로드'}
           </button>
         </div>
         <div className="summary-grid">
