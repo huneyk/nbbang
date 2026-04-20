@@ -388,6 +388,16 @@ function App() {
   };
 
   const openSettings = () => {
+    // 저장된 여행이 하나도 없으면(최초 상태) 설정 모달 대신 '첫 여행 시작하기' 모달을 연다.
+    if (!trips || trips.length === 0) {
+      setNewTripForm({
+        trip_title: '',
+        participants: '',
+        categories: '교통비, 식사비, 음료/간식, 숙박비, 기타',
+      });
+      setShowNewTripConfirm(true);
+      return;
+    }
     setSettingsForm({
       trip_title: settings.trip_title || '여행 경비 정산',
       participants: (settings.participants || []).join(', '),
