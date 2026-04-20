@@ -663,7 +663,11 @@ function App() {
           >
             로그아웃
           </button>
-          <button className="navbar-settings-btn" onClick={openSettings} title="설정">
+          <button
+            className={`navbar-settings-btn${(!trips || trips.length === 0) ? ' needs-setup' : ''}`}
+            onClick={openSettings}
+            title={(!trips || trips.length === 0) ? '첫 여행을 설정하세요' : '설정'}
+          >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3"/>
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -1253,29 +1257,6 @@ function App() {
                       ※ 해외 결제의 경우 건별, 결제금액별 수수료가 추가됩니다.
                       카드사마다 서로 달리 적용되니 확인해서 입력하시기 바랍니다.
                     </small>
-                  </div>
-
-                  <div style={{
-                    background: 'rgba(255, 195, 0, 0.08)',
-                    border: '1px solid rgba(255, 195, 0, 0.3)',
-                    padding: '12px 14px', borderRadius: 8,
-                    fontSize: 12, color: 'var(--text-muted)',
-                    marginTop: 8, marginBottom: 16,
-                  }}>
-                    🔐 Google API Key와 한국수출입은행 API Key는 관리자가 일괄 관리합니다.
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => { setShowSettings(false); setShowAdminSettings(true); }}
-                        style={{
-                          marginLeft: 8, background: 'transparent', border: 'none',
-                          color: '#e94560', cursor: 'pointer', textDecoration: 'underline',
-                          fontSize: 12,
-                        }}
-                      >
-                        관리자 페이지 열기 →
-                      </button>
-                    )}
                   </div>
 
                   <div className="new-trip-section">
