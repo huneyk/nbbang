@@ -265,6 +265,61 @@ body {
   font-size: 0.85rem;
 }
 
+/* 모바일 전용 업로드 분리 UI (데스크톱에서는 숨김) */
+.upload-mobile {
+  display: none;
+}
+
+.upload-mobile-hint {
+  display: none;
+}
+
+.upload-tile {
+  flex: 1;
+  min-width: 0;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-sm);
+  background: rgba(46, 204, 113, 0.03);
+  padding: 1.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+  font-family: inherit;
+}
+
+.upload-tile:hover:not(:disabled),
+.upload-tile:active:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: rgba(46, 204, 113, 0.08);
+}
+
+.upload-tile:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.upload-tile-icon {
+  font-size: 2rem;
+  line-height: 1;
+  margin-bottom: 0.25rem;
+}
+
+.upload-tile-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.upload-tile small {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
 /* 분석 결과 */
 .ocr-result {
   margin-top: 1.5rem;
@@ -1577,6 +1632,24 @@ body {
     font-size: 0.9rem;
   }
 
+  /* 모바일: 드롭존 대신 카메라/앨범 분리 UI 사용 */
+  .dropzone-desktop {
+    display: none;
+  }
+
+  .upload-mobile {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  .upload-mobile-hint {
+    display: block;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-top: 0.75rem;
+  }
+
   /* 경비 내역 - 모바일 카드 레이아웃 */
   .right-panel .card {
     overflow-x: hidden;
@@ -1936,6 +2009,26 @@ body {
 
   .dropzone {
     padding: 1.5rem 0.75rem;
+  }
+
+  .upload-mobile {
+    gap: 0.5rem;
+  }
+
+  .upload-tile {
+    padding: 1.1rem 0.5rem;
+  }
+
+  .upload-tile-icon {
+    font-size: 1.7rem;
+  }
+
+  .upload-tile-title {
+    font-size: 0.88rem;
+  }
+
+  .upload-tile small {
+    font-size: 0.72rem;
   }
 
   .badge {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import './App.css';
 import apiClient, { API_BASE, tokenStorage } from './api/client';
@@ -159,19 +159,15 @@ function App() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const onDrop = useCallback(async (acceptedFiles, rejectedFiles) => {
-    if (rejectedFiles.length > 0) {
-      const rejection = rejectedFiles[0];
-      if (rejection.errors.some((e) => e.code === 'file-too-large')) {
-        showToast('파일이 너무 큽니다. 50MB 이하의 이미지를 업로드해주세요.', 'error');
-      } else {
-        showToast('지원하지 않는 파일 형식입니다.', 'error');
-      }
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+
+  const processReceiptFile = useCallback(async (file) => {
+    if (!file) return;
+    if (!file.type || !file.type.startsWith('image/')) {
+      showToast('지원하지 않는 파일 형식입니다.', 'error');
       return;
     }
-
-    if (acceptedFiles.length === 0) return;
-    const file = acceptedFiles[0];
     if (file.size > MAX_FILE_SIZE) {
       showToast('파일이 너무 큽니다. 50MB 이하의 이미지를 업로드해주세요.', 'error');
       return;
@@ -223,12 +219,32 @@ function App() {
     }
   }, []);
 
+  const onDrop = useCallback(async (acceptedFiles, rejectedFiles) => {
+    if (rejectedFiles.length > 0) {
+      const rejection = rejectedFiles[0];
+      if (rejection.errors.some((e) => e.code === 'file-too-large')) {
+        showToast('파일이 너무 큽니다. 50MB 이하의 이미지를 업로드해주세요.', 'error');
+      } else {
+        showToast('지원하지 않는 파일 형식입니다.', 'error');
+      }
+      return;
+    }
+    if (acceptedFiles.length === 0) return;
+    await processReceiptFile(acceptedFiles[0]);
+  }, [processReceiptFile]);
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'] },
     maxFiles: 1,
     maxSize: MAX_FILE_SIZE,
   });
+
+  const handleMobileFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) await processReceiptFile(file);
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -651,8 +667,8 @@ function App() {
               <span>📷</span> 영수증 업로드
             </h2>
 
-            <div {...getRootProps()} className={`dropzone ${isDragActive ? 'active' : ''}`}>
-              <input {...getInputProps({ capture: 'environment' })} />
+            <div {...getRootProps()} className={`dropzone dropzone-desktop ${isDragActive ? 'active' : ''}`}>
+              <input {...getInputProps()} />
               <div className="dropzone-icon">
                 {analyzing ? <div className="loading"></div> : '🧾'}
               </div>
@@ -661,6 +677,51 @@ function App() {
               </p>
               <small>JPG, PNG, GIF, WEBP 지원 · 영수증 영역 자동 인식</small>
             </div>
+
+            <div className="upload-mobile">
+              <button
+                type="button"
+                className="upload-tile"
+                onClick={() => !analyzing && cameraInputRef.current?.click()}
+                disabled={analyzing}
+              >
+                <div className="upload-tile-icon">
+                  {analyzing ? <div className="loading"></div> : '📷'}
+                </div>
+                <div className="upload-tile-title">카메라</div>
+                <small>영수증 촬영</small>
+              </button>
+              <button
+                type="button"
+                className="upload-tile"
+                onClick={() => !analyzing && galleryInputRef.current?.click()}
+                disabled={analyzing}
+              >
+                <div className="upload-tile-icon">
+                  {analyzing ? <div className="loading"></div> : '🖼️'}
+                </div>
+                <div className="upload-tile-title">사진 앨범</div>
+                <small>사진 파일 업로드</small>
+              </button>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: 'none' }}
+                onChange={handleMobileFileChange}
+              />
+              <input
+                ref={galleryInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleMobileFileChange}
+              />
+            </div>
+            <p className="upload-mobile-hint">
+              {analyzing ? '영수증 분석 중...' : 'JPG, PNG, GIF, WEBP 지원 · 영수증 영역 자동 인식'}
+            </p>
 
             {previewImage && (
               <img src={previewImage} alt="영수증 미리보기" className="preview-image" />
