@@ -33,6 +33,7 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
+  font-family: 'Nunito Sans', 'Gowun Dodum', 'Noto Sans KR', sans-serif;
   background-image: 
     radial-gradient(ellipse at 10% 20%, rgba(46, 204, 113, 0.08) 0%, transparent 50%),
     radial-gradient(ellipse at 90% 80%, rgba(0, 184, 148, 0.1) 0%, transparent 50%);
@@ -75,7 +76,7 @@ body {
 .navbar-title h1 {
   font-size: 1.8rem;
   font-weight: 400;
-  font-family: 'Jua', sans-serif;
+  font-family: 'Nunito', 'Jua', sans-serif;
   background: linear-gradient(135deg, var(--accent-primary) 0%, #1abc9c 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -152,7 +153,7 @@ body {
 .card-title {
   font-size: 1.2rem;
   font-weight: 400;
-  font-family: 'Jua', sans-serif;
+  font-family: 'Nunito', 'Jua', sans-serif;
   margin-bottom: 1.5rem;
   display: flex;
   align-items: center;

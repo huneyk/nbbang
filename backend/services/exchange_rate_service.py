@@ -1,7 +1,7 @@
 import os
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 
 import requests
 
@@ -9,10 +9,9 @@ from config import Config
 
 logger = logging.getLogger(__name__)
 
-# 현찰살때 스프레드 (매매기준율 대비)
 CASH_BUY_SPREADS = {
     'USD': 0.022,
-    'JPY': 0.0175,
+    'JPY': 0.017,
     'EUR': 0.023,
     'GBP': 0.020,
     'CNY': 0.060,
@@ -34,7 +33,6 @@ CASH_BUY_SPREADS = {
 }
 DEFAULT_SPREAD = 0.025
 
-# KOREAEXIM API에서 100단위로 고시하는 통화
 KOREAEXIM_PER_100 = {'JPY(100)', 'IDR(100)', 'VND(100)'}
 
 DEFAULT_FETCH_CURRENCIES = ['USD', 'JPY', 'CNY', 'EUR', 'HKD']
@@ -137,18 +135,13 @@ def _fetch_from_free_api(target_currencies: List[str]) -> Tuple[Dict, str]:
 def fetch_exchange_rates(settings: dict) -> dict:
     """환율을 조회하여 현찰살때 기준 환율 딕셔너리를 반환합니다.
 
-    Returns:
-        {
-            'rates': {'USD': 1373.63, 'JPY': 9.67, ...},
-            'source': '한국수출입은행 (2026.03.20)',
-            'updated_at': '2026-03-21T04:00:00',
-            'rate_type': '현찰살때 (추정)'
-        }
+    한국수출입은행 API 키는 전역 admin 설정(app_settings)에서 가져옵니다.
+    settings 인자는 사용자 트립의 통화 목록(currencies)을 결정하는 데에만 사용됩니다.
     """
-    koreaexim_key = (
-        settings.get('koreaexim_api_key', '')
-        or os.getenv('KOREAEXIM_API_KEY', '')
-    )
+    from services.app_settings_service import get_app_settings
+    koreaexim_key = (get_app_settings().get('koreaexim_api_key') or '').strip()
+    if not koreaexim_key:
+        koreaexim_key = os.getenv('KOREAEXIM_API_KEY', '')
 
     currencies = settings.get('currencies', [])
     target_codes = [c['code'] for c in currencies if not c.get('is_base')]

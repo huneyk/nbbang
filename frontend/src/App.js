@@ -1,75 +1,72 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import axios from 'axios';
 import './App.css';
+import apiClient, { API_BASE, tokenStorage } from './api/client';
+import { useAuth } from './auth/AuthContext';
+import LoginPage from './auth/LoginPage';
+import PasswordSetupModal from './auth/PasswordSetupModal';
+import AdminPanel from './admin/AdminPanel';
+import UsageGuide from './UsageGuide';
 
-// 데스크톱 앱에서는 상대 경로 사용, 개발 모드에서는 localhost 사용
-const API_BASE = process.env.REACT_APP_API_BASE !== undefined 
-  ? process.env.REACT_APP_API_BASE 
-  : 'http://localhost:5001';
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
-// 최대 파일 크기 (50MB)
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const buildAuthedUrl = (path) => {
+  const token = tokenStorage.get();
+  const sep = path.includes('?') ? '&' : '?';
+  return token ? `${API_BASE}${path}${sep}jwt=${encodeURIComponent(token)}` : `${API_BASE}${path}`;
+};
+
+const fetchAuthed = (path, options = {}) => {
+  const token = tokenStorage.get();
+  const headers = { ...(options.headers || {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return fetch(`${API_BASE}${path}`, { ...options, headers });
+};
 
 function App() {
+  const { user, loading: authLoading, isAuthenticated, isAdmin, hasPassword, logout } = useAuth();
+
   const [expenses, setExpenses] = useState([]);
   const [summary, setSummary] = useState(null);
   const [config, setConfig] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [settings, setSettings] = useState({});
   const [previewImage, setPreviewImage] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [exchangeRates, setExchangeRates] = useState({});
+  const [exchangeRateInfo, setExchangeRateInfo] = useState({ source: '', updated_at: '', rate_type: '' });
+  const [fetchingRates, setFetchingRates] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showNewTripConfirm, setShowNewTripConfirm] = useState(false);
-  const [trips, setTrips] = useState([]);
-  const [settingsTab, setSettingsTab] = useState('current'); // 'current' or 'trips'
-  
-  // 설정 상태
-  const [settings, setSettings] = useState({
-    trip_title: '여행 경비 정산',
-    participants: [],
-    categories: [],
-    credit_card_fee_rate: 2.5,
-    exchange_rates: { JPY: 9.5, USD: 1350 }
-  });
-  
-  // 통화 관리 상태
-  const [currencies, setCurrencies] = useState([
-    { code: 'KRW', name: '원', flag: '🇰🇷', rate: 1.0, is_base: true },
-    { code: 'JPY', name: '엔', flag: '🇯🇵', rate: 9.5, is_base: false },
-    { code: 'USD', name: '달러', flag: '🇺🇸', rate: 1350.0, is_base: false }
-  ]);
-  const [isExchangeCardOpen, setIsExchangeCardOpen] = useState(true);
-  const [isExpenseListOpen, setIsExpenseListOpen] = useState(false);
+  const [showAdminSettings, setShowAdminSettings] = useState(false);
+  const [showUsageGuide, setShowUsageGuide] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
-  const [receiptModalImage, setReceiptModalImage] = useState(null);
+  const [showNewTripConfirm, setShowNewTripConfirm] = useState(false);
   const [editingCurrency, setEditingCurrency] = useState(null);
-  const [currencyForm, setCurrencyForm] = useState({
-    code: '',
-    name: '',
-    flag: '🏳️',
-    rate: ''
-  });
-  
-  // 설정 폼 상태 (편집용)
+  const [currencies, setCurrencies] = useState([]);
+  const [trips, setTrips] = useState([]);
+  const [settingsTab, setSettingsTab] = useState('current');
+  const [receiptModalImage, setReceiptModalImage] = useState(null);
+  const [isExpenseListOpen, setIsExpenseListOpen] = useState(false);
+  const [isExchangeCardOpen, setIsExchangeCardOpen] = useState(false);
+
   const [settingsForm, setSettingsForm] = useState({
-    trip_title: '',
+    trip_title: '여행 경비 정산',
     participants: '',
     categories: '',
     credit_card_fee_rate: 2.5,
-    google_api_key: '',
-    koreaexim_api_key: ''
   });
-  
-  // 새 여행 폼 상태
+
+  const [currencyForm, setCurrencyForm] = useState({
+    code: '', name: '', flag: '🏳️', rate: '',
+  });
+
   const [newTripForm, setNewTripForm] = useState({
     trip_title: '',
     participants: '',
     categories: '교통비, 식사비, 음료/간식, 숙박비, 기타',
-    credit_card_fee_rate: 2.5
   });
-  
-  // 폼 상태
+
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     category: '기타',
@@ -80,135 +77,111 @@ function App() {
     payer: '',
     receipt_image: null,
     is_personal_expense: false,
-    personal_expense_for: ''
+    personal_expense_for: '',
   });
 
-  const isSingleParticipant = config?.participants?.length === 1;
-
-  // 환율 상태
-  const [exchangeRates, setExchangeRates] = useState({
-    JPY: 9.5,
-    USD: 1350
-  });
-  const [exchangeRateInfo, setExchangeRateInfo] = useState({});
-  const [fetchingRates, setFetchingRates] = useState(false);
+  const isSingleParticipant = (config?.participants?.length || 0) === 1;
 
   // 데이터 로드
   const loadData = useCallback(async () => {
+    if (!isAuthenticated) return;
     try {
       const [expensesRes, summaryRes, configRes, settingsRes, currenciesRes] = await Promise.all([
-        axios.get(`${API_BASE}/api/expenses`),
-        axios.get(`${API_BASE}/api/summary`),
-        axios.get(`${API_BASE}/api/config`),
-        axios.get(`${API_BASE}/api/settings`),
-        axios.get(`${API_BASE}/api/currencies`)
+        apiClient.get('/api/expenses'),
+        apiClient.get('/api/summary'),
+        apiClient.get('/api/config'),
+        apiClient.get('/api/settings'),
+        apiClient.get('/api/currencies'),
       ]);
-      
-      setExpenses(expensesRes.data.data || []);
+
+      setExpenses(expensesRes.data.data);
       setSummary(summaryRes.data.data);
       setConfig(configRes.data.data);
 
-      // 환율 갱신 정보
       if (configRes.data.data?.exchange_rate_info) {
         setExchangeRateInfo(configRes.data.data.exchange_rate_info);
       }
-      
-      // 통화 목록 로드
+
       if (currenciesRes.data.data) {
         setCurrencies(currenciesRes.data.data);
-        // exchange_rates 동기화
         const rates = {};
-        currenciesRes.data.data.forEach(c => {
-          rates[c.code] = c.rate;
-        });
+        currenciesRes.data.data.forEach((c) => { rates[c.code] = c.rate; });
         setExchangeRates(rates);
       }
-      
-      // 설정 로드
+
       const loadedSettings = settingsRes.data.data;
       setSettings(loadedSettings);
-      
-      // 설정 폼 초기화
+
       setSettingsForm({
         trip_title: loadedSettings.trip_title || '여행 경비 정산',
         participants: (loadedSettings.participants || []).join(', '),
         categories: (loadedSettings.categories || []).join(', '),
         credit_card_fee_rate: loadedSettings.credit_card_fee_rate || 2.5,
-        google_api_key: loadedSettings.google_api_key || '',
-        koreaexim_api_key: loadedSettings.koreaexim_api_key || ''
       });
-      
-      // 기본 payer 설정 (첫 번째 참가자)
+
       if (loadedSettings.participants?.length > 0) {
-        setFormData(prev => {
-          // 현재 payer가 참가자 목록에 없거나 비어있으면 첫 번째 참가자로 설정
+        setFormData((prev) => {
           const currentPayerValid = prev.payer && loadedSettings.participants.includes(prev.payer);
           return {
             ...prev,
-            payer: currentPayerValid ? prev.payer : loadedSettings.participants[0]
+            payer: currentPayerValid ? prev.payer : loadedSettings.participants[0],
           };
         });
       }
     } catch (error) {
       console.error('데이터 로드 오류:', error);
-      showToast('서버 연결에 실패했습니다.', 'error');
+      if (error?.response?.status !== 401) {
+        showToast('서버 연결에 실패했습니다.', 'error');
+      }
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (isAuthenticated) loadData();
+  }, [isAuthenticated, loadData]);
 
-  // 토스트 메시지
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  // 드롭존 설정
   const onDrop = useCallback(async (acceptedFiles, rejectedFiles) => {
-    // 거부된 파일 처리
     if (rejectedFiles.length > 0) {
       const rejection = rejectedFiles[0];
-      if (rejection.errors.some(e => e.code === 'file-too-large')) {
+      if (rejection.errors.some((e) => e.code === 'file-too-large')) {
         showToast('파일이 너무 큽니다. 50MB 이하의 이미지를 업로드해주세요.', 'error');
       } else {
         showToast('지원하지 않는 파일 형식입니다.', 'error');
       }
       return;
     }
-    
+
     if (acceptedFiles.length === 0) return;
-    
     const file = acceptedFiles[0];
-    
-    // 파일 크기 체크
     if (file.size > MAX_FILE_SIZE) {
       showToast('파일이 너무 큽니다. 50MB 이하의 이미지를 업로드해주세요.', 'error');
       return;
     }
-    
-    // 미리보기 이미지 설정
+
     const reader = new FileReader();
     reader.onload = (e) => setPreviewImage(e.target.result);
     reader.readAsDataURL(file);
-    
-    // 영수증 분석
+
     setAnalyzing(true);
     const formDataUpload = new FormData();
     formDataUpload.append('receipt', file);
-    
+
     try {
-      const response = await axios.post(`${API_BASE}/api/upload-receipt`, formDataUpload, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const response = await apiClient.post('/api/upload-receipt', formDataUpload, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
-      
+
       if (response.data.success) {
         const data = response.data.data;
         if (data.receipt_image) {
-          setPreviewImage(`${API_BASE}/api/receipts/${data.receipt_image}/image`);
+          setPreviewImage(buildAuthedUrl(`/api/receipts/${data.receipt_image}/image`));
         }
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
           date: data.date || prev.date,
           category: data.category || prev.category,
@@ -216,7 +189,7 @@ function App() {
           currency: data.currency || prev.currency,
           payment_method: data.payment_method || prev.payment_method,
           description: data.description || '',
-          receipt_image: data.receipt_image
+          receipt_image: data.receipt_image,
         }));
         showToast('영수증 분석이 완료되었습니다!');
       } else {
@@ -224,7 +197,6 @@ function App() {
       }
     } catch (error) {
       console.error('영수증 업로드 오류:', error);
-      // 서버 에러 응답 처리
       if (error.response?.status === 413) {
         showToast('파일이 너무 큽니다. 50MB 이하의 이미지를 업로드해주세요.', 'error');
       } else if (error.response?.data?.error) {
@@ -239,39 +211,29 @@ function App() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: {
-      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp']
-    },
+    accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'] },
     maxFiles: 1,
-    maxSize: MAX_FILE_SIZE
+    maxSize: MAX_FILE_SIZE,
   });
 
-  // 폼 입력 핸들러
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // 경비 등록
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
     if (!formData.amount || !formData.payer) {
       showToast('금액과 지불한 사람을 입력해주세요.', 'error');
       return;
     }
-    
-    // 개인 지출인데 해당자를 선택하지 않은 경우
     if (formData.is_personal_expense && !formData.personal_expense_for) {
       showToast('개인 지출 해당자를 선택해주세요.', 'error');
       return;
     }
-    
     setLoading(true);
-    
     try {
-      const response = await axios.post(`${API_BASE}/api/expenses`, formData);
-      
+      const response = await apiClient.post('/api/expenses', formData);
       if (response.data.success) {
         showToast('경비가 등록되었습니다!');
         setFormData({
@@ -284,7 +246,7 @@ function App() {
           payer: settings.participants?.[0] || '',
           receipt_image: null,
           is_personal_expense: false,
-          personal_expense_for: ''
+          personal_expense_for: '',
         });
         setPreviewImage(null);
         loadData();
@@ -297,12 +259,10 @@ function App() {
     }
   };
 
-  // 경비 삭제
   const handleDelete = async (id) => {
     if (!window.confirm('이 경비를 삭제하시겠습니까?')) return;
-    
     try {
-      await axios.delete(`${API_BASE}/api/expenses/${id}`);
+      await apiClient.delete(`/api/expenses/${id}`);
       showToast('경비가 삭제되었습니다.');
       loadData();
     } catch (error) {
@@ -311,21 +271,15 @@ function App() {
     }
   };
 
-  // 최신 환율 수동 가져오기
   const handleFetchLatestRates = async () => {
     setFetchingRates(true);
     try {
-      const response = await axios.post(`${API_BASE}/api/exchange-rates/fetch`);
+      const response = await apiClient.post('/api/exchange-rates/fetch');
       if (response.data.success) {
         const { rates, source, updated_at, rate_type, currencies: updatedCurrencies } = response.data.data;
-        
-        setExchangeRates(prev => ({ ...prev, ...rates }));
+        setExchangeRates((prev) => ({ ...prev, ...rates }));
         setExchangeRateInfo({ source, updated_at, rate_type });
-        
-        if (updatedCurrencies) {
-          setCurrencies(updatedCurrencies);
-        }
-        
+        if (updatedCurrencies) setCurrencies(updatedCurrencies);
         showToast(`환율이 갱신되었습니다 (${source})`, 'success');
         loadData();
       }
@@ -337,84 +291,61 @@ function App() {
     }
   };
 
-  // 환율 업데이트
   const handleRateChange = async (currency, value) => {
     const rate = parseFloat(value) || 0;
-    setExchangeRates(prev => ({ ...prev, [currency]: rate }));
-    
-    // currencies 상태도 업데이트
-    setCurrencies(prev => prev.map(c => 
-      c.code === currency ? { ...c, rate } : c
-    ));
-    
+    setExchangeRates((prev) => ({ ...prev, [currency]: rate }));
+    setCurrencies((prev) => prev.map((c) => (c.code === currency ? { ...c, rate } : c)));
     try {
-      await axios.put(`${API_BASE}/api/exchange-rates`, {
-        [currency]: rate
-      });
+      await apiClient.put('/api/exchange-rates', { [currency]: rate });
     } catch (error) {
       console.error('환율 업데이트 오류:', error);
     }
   };
 
-  // 통화 모달 열기
   const openCurrencyModal = (currency = null) => {
     if (currency) {
-      // 수정 모드
       setEditingCurrency(currency);
       setCurrencyForm({
         code: currency.code,
         name: currency.name,
         flag: currency.flag,
-        rate: currency.rate
+        rate: currency.rate,
       });
     } else {
-      // 추가 모드
       setEditingCurrency(null);
-      setCurrencyForm({
-        code: '',
-        name: '',
-        flag: '🏳️',
-        rate: ''
-      });
+      setCurrencyForm({ code: '', name: '', flag: '🏳️', rate: '' });
     }
     setShowCurrencyModal(true);
   };
 
-  // 통화 폼 입력 핸들러
   const handleCurrencyFormChange = (e) => {
     const { name, value } = e.target;
-    setCurrencyForm(prev => ({ ...prev, [name]: value }));
+    setCurrencyForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // 통화 저장 (추가/수정)
   const handleSaveCurrency = async () => {
     if (!currencyForm.code || !currencyForm.name || !currencyForm.rate) {
       showToast('통화 코드, 이름, 환율을 모두 입력해주세요.', 'error');
       return;
     }
-
     try {
       setLoading(true);
-      
       if (editingCurrency) {
-        // 수정
-        await axios.put(`${API_BASE}/api/currencies/${editingCurrency.code}`, {
+        await apiClient.put(`/api/currencies/${editingCurrency.code}`, {
           name: currencyForm.name,
           flag: currencyForm.flag,
-          rate: parseFloat(currencyForm.rate)
+          rate: parseFloat(currencyForm.rate),
         });
         showToast('통화가 수정되었습니다!');
       } else {
-        // 추가
-        await axios.post(`${API_BASE}/api/currencies`, {
+        await apiClient.post('/api/currencies', {
           code: currencyForm.code.toUpperCase(),
           name: currencyForm.name,
           flag: currencyForm.flag,
-          rate: parseFloat(currencyForm.rate)
+          rate: parseFloat(currencyForm.rate),
         });
         showToast('통화가 추가되었습니다!');
       }
-      
       setShowCurrencyModal(false);
       loadData();
     } catch (error) {
@@ -425,55 +356,43 @@ function App() {
     }
   };
 
-  // 설정 모달 열기
   const openSettings = () => {
     setSettingsForm({
       trip_title: settings.trip_title || '여행 경비 정산',
       participants: (settings.participants || []).join(', '),
       categories: (settings.categories || []).join(', '),
       credit_card_fee_rate: settings.credit_card_fee_rate || 2.5,
-      google_api_key: settings.google_api_key || '',
-      koreaexim_api_key: settings.koreaexim_api_key || ''
     });
     setSettingsTab('current');
     setShowSettings(true);
-    loadTrips(); // 저장된 여행 목록 로드
+    loadTrips();
   };
 
-  // 설정 저장
   const handleSaveSettings = async () => {
     try {
       setLoading(true);
-      
       const newSettings = {
         trip_title: settingsForm.trip_title.trim() || '여행 경비 정산',
-        participants: settingsForm.participants.split(',').map(p => p.trim()).filter(p => p),
-        categories: settingsForm.categories.split(',').map(c => c.trim()).filter(c => c),
+        participants: settingsForm.participants.split(',').map((p) => p.trim()).filter((p) => p),
+        categories: settingsForm.categories.split(',').map((c) => c.trim()).filter((c) => c),
         credit_card_fee_rate: parseFloat(settingsForm.credit_card_fee_rate) || 2.5,
         exchange_rates: exchangeRates,
-        google_api_key: settingsForm.google_api_key.trim(),
-        koreaexim_api_key: settingsForm.koreaexim_api_key.trim()
       };
-      
-      // 참가자가 비어있으면 경고
       if (newSettings.participants.length === 0) {
         showToast('최소 1명의 참가자를 입력해주세요.', 'error');
         setLoading(false);
         return;
       }
-      
-      // 카테고리가 비어있으면 기본값 설정
-      if (newSettings.categories.length === 0) {
-        newSettings.categories = ['기타'];
-      }
-      
-      await axios.put(`${API_BASE}/api/settings`, newSettings);
-      
-      setSettings(newSettings);
+      if (newSettings.categories.length === 0) newSettings.categories = ['기타'];
+
+      // 신용카드 수수료율은 사용자 계정 프로필에 저장(트립 공용 값 아님).
+      await apiClient.patch('/api/auth/me', {
+        credit_card_fee_rate: newSettings.credit_card_fee_rate,
+      });
+      await apiClient.put('/api/settings', newSettings);
+      setSettings((prev) => ({ ...prev, ...newSettings }));
       setShowSettings(false);
       showToast('설정이 저장되었습니다!');
-      
-      // 데이터 새로고침
       loadData();
     } catch (error) {
       console.error('설정 저장 오류:', error);
@@ -483,47 +402,37 @@ function App() {
     }
   };
 
-  // 설정 폼 입력 핸들러
   const handleSettingsChange = (e) => {
     const { name, value } = e.target;
-    setSettingsForm(prev => ({ ...prev, [name]: value }));
+    setSettingsForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // 새 여행 폼 입력 핸들러
   const handleNewTripFormChange = (e) => {
     const { name, value } = e.target;
-    setNewTripForm(prev => ({ ...prev, [name]: value }));
+    setNewTripForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // 새 여행 확인 모달 열기
   const openNewTripConfirm = () => {
     setNewTripForm({
       trip_title: '',
       participants: '',
       categories: '교통비, 식사비, 음료/간식, 숙박비, 기타',
-      credit_card_fee_rate: 2.5
     });
     setShowNewTripConfirm(true);
   };
 
-  // 새 여행 생성
   const handleCreateNewTrip = async () => {
     if (!newTripForm.trip_title.trim() || !newTripForm.participants.trim()) {
       showToast('여행 타이틀과 참가자를 입력해주세요.', 'error');
       return;
     }
-
     try {
       setLoading(true);
-      
-      // 현재 여행 아카이브 및 새 여행 시작
-      await axios.post(`${API_BASE}/api/trips/new`, {
+      await apiClient.post('/api/trips/new', {
         trip_title: newTripForm.trip_title.trim(),
-        participants: newTripForm.participants.split(',').map(p => p.trim()).filter(p => p),
-        categories: newTripForm.categories.split(',').map(c => c.trim()).filter(c => c),
-        credit_card_fee_rate: parseFloat(newTripForm.credit_card_fee_rate) || 2.5
+        participants: newTripForm.participants.split(',').map((p) => p.trim()).filter((p) => p),
+        categories: newTripForm.categories.split(',').map((c) => c.trim()).filter((c) => c),
       });
-      
       setShowNewTripConfirm(false);
       setShowSettings(false);
       showToast('새 여행이 시작되었습니다!');
@@ -537,23 +446,20 @@ function App() {
     }
   };
 
-  // 저장된 여행 목록 로드
   const loadTrips = async () => {
     try {
-      const response = await axios.get(`${API_BASE}/api/trips`);
+      const response = await apiClient.get('/api/trips');
       setTrips(response.data.data || []);
     } catch (error) {
       console.error('여행 목록 로드 오류:', error);
     }
   };
 
-  // 여행 불러오기
   const handleLoadTrip = async (tripId) => {
-    if (!window.confirm('현재 데이터를 저장하고 선택한 여행을 불러올까요?')) return;
-    
+    if (!window.confirm('선택한 여행을 불러올까요?')) return;
     try {
       setLoading(true);
-      await axios.get(`${API_BASE}/api/trips/${tripId}`);
+      await apiClient.get(`/api/trips/${tripId}`);
       setShowSettings(false);
       showToast('여행을 불러왔습니다!');
       loadData();
@@ -566,49 +472,40 @@ function App() {
     }
   };
 
-  // 여행 삭제
   const handleDeleteTrip = async (tripId, tripTitle) => {
     if (!window.confirm(`"${tripTitle}" 여행을 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
-    
     try {
-      await axios.delete(`${API_BASE}/api/trips/${tripId}`);
+      await apiClient.delete(`/api/trips/${tripId}`);
       showToast('여행이 삭제되었습니다.');
       loadTrips();
+      loadData();
     } catch (error) {
       console.error('여행 삭제 오류:', error);
       showToast(error.response?.data?.error || '여행 삭제에 실패했습니다.', 'error');
     }
   };
 
-  // 날짜 포맷
   const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
-    return date.toLocaleDateString('ko-KR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    return date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  // 금액 포맷
-  const formatAmount = (amount) => {
-    return new Intl.NumberFormat('ko-KR').format(Math.round(amount));
-  };
+  const formatAmount = (amount) => new Intl.NumberFormat('ko-KR').format(Math.round(amount));
 
-  // 엑셀 리포트 다운로드
   const handleDownloadReport = async () => {
     try {
       setLoading(true);
-      
-      const response = await fetch(`${API_BASE}/api/report/download`);
+      const response = await fetchAuthed('/api/report/download');
+      if (!response.ok) {
+        showToast('엑셀 리포트 다운로드에 실패했습니다.', 'error');
+        return;
+      }
       const blob = await response.blob();
-      
       const now = new Date();
-      const dateStr = now.toISOString().slice(0,10).replace(/-/g, '');
-      const timeStr = now.toTimeString().slice(0,8).replace(/:/g, '');
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+      const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '');
       const filename = `expense_${dateStr}_${timeStr}.xlsx`;
-      
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -617,7 +514,6 @@ function App() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
       showToast('엑셀 리포트가 다운로드되었습니다!');
     } catch (error) {
       console.error('리포트 다운로드 오류:', error);
@@ -627,26 +523,20 @@ function App() {
     }
   };
 
-  // 영수증 첨부 PDF 다운로드
   const handleDownloadReceipts = async () => {
     try {
       setLoading(true);
-      
-      const response = await fetch(`${API_BASE}/api/report/download-receipts`);
-      
+      const response = await fetchAuthed('/api/report/download-receipts');
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         showToast(errorData.error || '영수증 다운로드에 실패했습니다.', 'error');
         return;
       }
-      
       const blob = await response.blob();
-      
       const now = new Date();
-      const dateStr = now.toISOString().slice(0,10).replace(/-/g, '');
-      const timeStr = now.toTimeString().slice(0,8).replace(/:/g, '');
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+      const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '');
       const filename = `receipts_${dateStr}_${timeStr}.pdf`;
-      
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -655,7 +545,6 @@ function App() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
       showToast('영수증 PDF가 다운로드되었습니다!');
     } catch (error) {
       console.error('영수증 다운로드 오류:', error);
@@ -664,6 +553,21 @@ function App() {
       setLoading(false);
     }
   };
+
+  if (authLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#1a1a2e', color: '#fff', fontSize: 16,
+      }}>
+        로딩 중…
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
   return (
     <div className="app">
@@ -675,89 +579,103 @@ function App() {
           <h1>🌏 {settings.trip_title || '여행 경비 정산'}</h1>
           <p>"N빵 하자!" 영수증만 찰칵! 여행 경비 정산 실시간으로 끝!</p>
         </div>
-        <button className="navbar-settings-btn" onClick={openSettings} title="설정">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+            👤 {user?.name || user?.email}
+            {isAdmin && <span style={{
+              marginLeft: 6, padding: '2px 8px', borderRadius: 999,
+              background: '#ffc300', color: '#1a1a2e', fontSize: 11, fontWeight: 700,
+            }}>ADMIN</span>}
+          </span>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setShowAdminSettings(true)}
+              style={{
+                padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-color)',
+                background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12,
+              }}
+              title="관리자 설정"
+            >
+              🛠 관리자
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowUsageGuide(true)}
+            style={{
+              padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-color)',
+              background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12,
+            }}
+            title="사용법 안내"
+          >
+            📖 사용법
+          </button>
+          <button
+            type="button"
+            onClick={logout}
+            style={{
+              padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-color)',
+              background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12,
+            }}
+          >
+            로그아웃
+          </button>
+          <button className="navbar-settings-btn" onClick={openSettings} title="설정">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
       </nav>
 
       <div className="main-grid">
-        {/* 좌측: 입력 폼 */}
         <div className="left-panel">
           <div className="card">
             <h2 className="card-title">
               <span>📷</span> 영수증 업로드
             </h2>
-            
-            <div 
-              {...getRootProps()} 
-              className={`dropzone ${isDragActive ? 'active' : ''}`}
-            >
+
+            <div {...getRootProps()} className={`dropzone ${isDragActive ? 'active' : ''}`}>
               <input {...getInputProps({ capture: 'environment' })} />
               <div className="dropzone-icon">
                 {analyzing ? <div className="loading"></div> : '🧾'}
               </div>
               <p>
-                {analyzing 
-                  ? '영수증 분석 중...' 
-                  : '영수증을 촬영하거나 이미지를 선택하세요'}
+                {analyzing ? '영수증 분석 중...' : '영수증을 촬영하거나 이미지를 선택하세요'}
               </p>
               <small>JPG, PNG, GIF, WEBP 지원 · 영수증 영역 자동 인식</small>
             </div>
-            
+
             {previewImage && (
               <img src={previewImage} alt="영수증 미리보기" className="preview-image" />
             )}
-            
+
             {formData.receipt_image && formData.amount && (
               <div className="ocr-result">
                 <h4>✓ 분석 결과</h4>
-                <div className="ocr-result-item">
-                  <span>날짜</span>
-                  <span>{formData.date}</span>
-                </div>
-                <div className="ocr-result-item">
-                  <span>금액</span>
-                  <span>{formatAmount(formData.amount)} {formData.currency}</span>
-                </div>
-                <div className="ocr-result-item">
-                  <span>결제수단</span>
-                  <span>{formData.payment_method}</span>
-                </div>
-                <div className="ocr-result-item">
-                  <span>분류</span>
-                  <span>{formData.category}</span>
-                </div>
+                <div className="ocr-result-item"><span>날짜</span><span>{formData.date}</span></div>
+                <div className="ocr-result-item"><span>금액</span><span>{formatAmount(formData.amount)} {formData.currency}</span></div>
+                <div className="ocr-result-item"><span>결제수단</span><span>{formData.payment_method}</span></div>
+                <div className="ocr-result-item"><span>분류</span><span>{formData.category}</span></div>
               </div>
             )}
           </div>
 
           <div className="card" style={{ marginTop: '1.5rem' }}>
-            <h2 className="card-title">
-              <span>✏️</span> 경비 입력
-            </h2>
-            
+            <h2 className="card-title"><span>✏️</span> 경비 입력</h2>
+
             <form onSubmit={handleSubmit}>
               <div className="form-row">
                 <div className="form-group">
                   <label>날짜</label>
-                  <input
-                    type="date"
-                    name="date"
-                    value={formData.date}
-                    onChange={handleInputChange}
-                  />
+                  <input type="date" name="date" value={formData.date} onChange={handleInputChange} />
                 </div>
                 <div className="form-group">
                   <label>지출 항목</label>
-                  <select
-                    name="category"
-                    value={formData.category}
-                    onChange={handleInputChange}
-                  >
-                    {config?.categories?.map(cat => (
+                  <select name="category" value={formData.category} onChange={handleInputChange}>
+                    {config?.categories?.map((cat) => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
@@ -767,22 +685,13 @@ function App() {
               <div className="form-row">
                 <div className="form-group">
                   <label>금액</label>
-                  <input
-                    type="number"
-                    name="amount"
-                    value={formData.amount}
-                    onChange={handleInputChange}
-                    placeholder="금액 입력"
-                  />
+                  <input type="number" name="amount" value={formData.amount}
+                    onChange={handleInputChange} placeholder="금액 입력" />
                 </div>
                 <div className="form-group">
                   <label>화폐 단위</label>
-                  <select
-                    name="currency"
-                    value={formData.currency}
-                    onChange={handleInputChange}
-                  >
-                    {currencies.map(curr => (
+                  <select name="currency" value={formData.currency} onChange={handleInputChange}>
+                    {currencies.map((curr) => (
                       <option key={curr.code} value={curr.code}>
                         {curr.flag} {curr.code} ({curr.name})
                       </option>
@@ -794,11 +703,7 @@ function App() {
               <div className="form-row">
                 <div className="form-group">
                   <label>결제 수단</label>
-                  <select
-                    name="payment_method"
-                    value={formData.payment_method}
-                    onChange={handleInputChange}
-                  >
+                  <select name="payment_method" value={formData.payment_method} onChange={handleInputChange}>
                     <option value="현금">💵 현금</option>
                     <option value="신용카드">💳 신용카드 (+{settings.credit_card_fee_rate || 2.5}%)</option>
                   </select>
@@ -806,21 +711,11 @@ function App() {
                 <div className="form-group">
                   <label>{isSingleParticipant ? '정산책임자' : '지불한 사람'}</label>
                   {isSingleParticipant ? (
-                    <input
-                      type="text"
-                      value={config.participants[0]}
-                      readOnly
-                      className="readonly-input"
-                    />
+                    <input type="text" value={config.participants[0]} readOnly className="readonly-input" />
                   ) : (
-                    <select
-                      name="payer"
-                      value={formData.payer}
-                      onChange={handleInputChange}
-                      required
-                    >
+                    <select name="payer" value={formData.payer} onChange={handleInputChange} required>
                       <option value="">선택하세요</option>
-                      {config?.participants?.map(p => (
+                      {config?.participants?.map((p) => (
                         <option key={p} value={p}>{p}</option>
                       ))}
                     </select>
@@ -830,13 +725,8 @@ function App() {
 
               <div className="form-group">
                 <label>세부 내역</label>
-                <input
-                  type="text"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  placeholder="가게명, 메모 등"
-                />
+                <input type="text" name="description" value={formData.description}
+                  onChange={handleInputChange} placeholder="가게명, 메모 등" />
               </div>
 
               {!isSingleParticipant && (
@@ -848,10 +738,8 @@ function App() {
                         type="radio"
                         name="expense_type"
                         checked={!formData.is_personal_expense}
-                        onChange={() => setFormData(prev => ({ 
-                          ...prev, 
-                          is_personal_expense: false,
-                          personal_expense_for: ''
+                        onChange={() => setFormData((prev) => ({
+                          ...prev, is_personal_expense: false, personal_expense_for: '',
                         }))}
                       />
                       <span className="expense-type-label">👥 공동 경비</span>
@@ -861,10 +749,7 @@ function App() {
                         type="radio"
                         name="expense_type"
                         checked={formData.is_personal_expense}
-                        onChange={() => setFormData(prev => ({ 
-                          ...prev, 
-                          is_personal_expense: true 
-                        }))}
+                        onChange={() => setFormData((prev) => ({ ...prev, is_personal_expense: true }))}
                       />
                       <span className="expense-type-label">👤 개인 지출</span>
                     </label>
@@ -875,14 +760,10 @@ function App() {
               {!isSingleParticipant && formData.is_personal_expense && (
                 <div className="form-group personal-expense-for">
                   <label>개인 지출 해당자</label>
-                  <select
-                    name="personal_expense_for"
-                    value={formData.personal_expense_for}
-                    onChange={handleInputChange}
-                    required
-                  >
+                  <select name="personal_expense_for" value={formData.personal_expense_for}
+                    onChange={handleInputChange} required>
                     <option value="">해당자 선택</option>
-                    {config?.participants?.map(p => (
+                    {config?.participants?.map((p) => (
                       <option key={p} value={p}>{p}</option>
                     ))}
                   </select>
@@ -897,14 +778,14 @@ function App() {
           </div>
 
           <div className="card card-collapsible" style={{ marginTop: '1.5rem' }}>
-            <h2 
+            <h2
               className="card-title card-title-toggle"
-              onClick={() => setIsExchangeCardOpen(prev => !prev)}
+              onClick={() => setIsExchangeCardOpen((prev) => !prev)}
             >
               <span className={`card-toggle-chevron chevron-exchange ${isExchangeCardOpen ? 'open' : ''}`}>▶</span>
               <span>💱</span> 환율 설정
               <span className="card-title-badge">현찰살때</span>
-              <button 
+              <button
                 className="add-currency-btn"
                 onClick={(e) => { e.stopPropagation(); openCurrencyModal(); }}
                 title="통화 추가"
@@ -912,11 +793,11 @@ function App() {
                 ➕
               </button>
             </h2>
-            
+
             {isExchangeCardOpen && (
               <div className="card-collapsible-body">
                 <div className="exchange-rate-actions">
-                  <button 
+                  <button
                     className="btn btn-fetch-rate"
                     onClick={handleFetchLatestRates}
                     disabled={fetchingRates}
@@ -925,14 +806,14 @@ function App() {
                     {fetchingRates ? <div className="loading"></div> : '🔄 최신 환율 가져오기'}
                   </button>
                 </div>
-                
+
                 {exchangeRateInfo.updated_at && (
                   <div className="exchange-rate-info">
                     <span className="rate-info-label">마지막 갱신:</span>
                     <span className="rate-info-value">
                       {new Date(exchangeRateInfo.updated_at).toLocaleString('ko-KR', {
                         year: 'numeric', month: '2-digit', day: '2-digit',
-                        hour: '2-digit', minute: '2-digit'
+                        hour: '2-digit', minute: '2-digit',
                       })}
                     </span>
                     {exchangeRateInfo.source && (
@@ -942,7 +823,7 @@ function App() {
                 )}
 
                 <div className="exchange-rates">
-                  {currencies.filter(c => !c.is_base).map(curr => (
+                  {currencies.filter((c) => !c.is_base).map((curr) => (
                     <div className="rate-item" key={curr.code}>
                       <label>{curr.flag} 1 {curr.code} =</label>
                       <input
@@ -954,7 +835,7 @@ function App() {
                       <span className="rate-unit">KRW</span>
                     </div>
                   ))}
-                  {currencies.filter(c => !c.is_base).length === 0 && (
+                  {currencies.filter((c) => !c.is_base).length === 0 && (
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                       등록된 외화가 없습니다. ➕ 버튼을 눌러 통화를 추가하세요.
                     </p>
@@ -968,12 +849,11 @@ function App() {
           </div>
         </div>
 
-        {/* 우측: 경비 내역 테이블 */}
         <div className="right-panel">
           <div className="card card-collapsible">
-            <h2 
+            <h2
               className="card-title card-title-toggle"
-              onClick={() => setIsExpenseListOpen(prev => !prev)}
+              onClick={() => setIsExpenseListOpen((prev) => !prev)}
             >
               <span className={`card-toggle-chevron chevron-expense ${isExpenseListOpen ? 'open' : ''}`}>▶</span>
               <span>📋</span> 경비 내역
@@ -983,7 +863,7 @@ function App() {
                 </span>
               )}
             </h2>
-            
+
             <div className="card-collapsible-body">
               <div className="expense-table-wrapper">
                 {expenses.length === 0 ? (
@@ -1010,8 +890,8 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(isExpenseListOpen ? expenses : expenses.slice(0, 1)).map(expense => (
-                        <tr key={expense._id} className={expense.is_personal_expense ? 'personal-expense-row' : ''}>
+                      {(isExpenseListOpen ? expenses : expenses.slice(0, 1)).map((expense) => (
+                        <tr key={expense.id || expense._id} className={expense.is_personal_expense ? 'personal-expense-row' : ''}>
                           <td data-label="날짜">{expense.date}</td>
                           <td data-label="지출 항목">
                             <span className="badge badge-category">{expense.category}</span>
@@ -1025,7 +905,7 @@ function App() {
                             </span>
                           </td>
                           <td data-label="적용 환율" className="amount exchange-rate">
-                            {expense.exchange_rate ? expense.exchange_rate.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}
+                            {expense.exchange_rate ? expense.exchange_rate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                           </td>
                           <td data-label="원화 환산액" className="amount krw-amount">
                             ₩{formatAmount(expense.krw_amount)}
@@ -1036,7 +916,7 @@ function App() {
                             {expense.receipt_image ? (
                               <button
                                 className="receipt-icon-btn"
-                                onClick={() => setReceiptModalImage(`${API_BASE}/api/receipts/${expense.receipt_image}/image`)}
+                                onClick={() => setReceiptModalImage(buildAuthedUrl(`/api/receipts/${expense.receipt_image}/image`))}
                                 title="영수증 보기"
                               >
                                 🧾
@@ -1055,9 +935,9 @@ function App() {
                             )}
                           </td>
                           <td>
-                            <button 
+                            <button
                               className="delete-btn"
-                              onClick={() => handleDelete(expense._id)}
+                              onClick={() => handleDelete(expense.id || expense._id)}
                               title="삭제"
                             >
                               🗑️
@@ -1085,74 +965,71 @@ function App() {
         </div>
       </div>
 
-      {/* 요약 섹션 */}
       {summary && (
         <>
-        <div className="summary-grid">
-          <div className="summary-card total">
-            <h3>💰 총 경비</h3>
-            <div className="value">
-              {formatAmount(summary.total_krw)}
-              <span className="unit">원</span>
-            </div>
-            <div className="summary-breakdown">
-              <p>
-                👥 공동 경비: ₩{formatAmount(summary.shared_total_krw || summary.total_krw)} ({summary.shared_expense_count || summary.expense_count}건)
-              </p>
-              {(summary.personal_total_krw > 0 || summary.personal_expense_count > 0) && (
-                <p>
-                  👤 개인 지출: ₩{formatAmount(summary.personal_total_krw || 0)} ({summary.personal_expense_count || 0}건)
-                </p>
-              )}
-            </div>
-          </div>
-          
-          {!isSingleParticipant && (
-            <div className="summary-card per-person">
-              <h3>👥 1인당 분담액</h3>
+          <div className="summary-grid">
+            <div className="summary-card total">
+              <h3>💰 총 경비</h3>
               <div className="value">
-                {formatAmount(summary.per_person)}
+                {formatAmount(summary.total_krw)}
                 <span className="unit">원</span>
               </div>
-              <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                {summary.num_participants}명 기준 (공동 경비만)
-              </p>
+              <div className="summary-breakdown">
+                <p>
+                  👥 공동 경비: ₩{formatAmount(summary.shared_total_krw || summary.total_krw)} ({summary.shared_expense_count || summary.expense_count}건)
+                </p>
+                {(summary.personal_total_krw > 0 || summary.personal_expense_count > 0) && (
+                  <p>
+                    👤 개인 지출: ₩{formatAmount(summary.personal_total_krw || 0)} ({summary.personal_expense_count || 0}건)
+                  </p>
+                )}
+              </div>
             </div>
-          )}
 
-          <div className="summary-card">
-            <h3>📊 카테고리별 지출</h3>
-            <div className="category-breakdown">
-              {summary.category_totals && Object.entries(summary.category_totals)
-                .filter(([_, amount]) => amount > 0)
-                .sort((a, b) => b[1] - a[1])
-                .map(([category, amount]) => (
-                  <div key={category} className="category-item">
-                    <div className="category-header">
-                      <span className="category-name">{category}</span>
-                      <span className="category-amount">₩{formatAmount(amount)}</span>
+            {!isSingleParticipant && (
+              <div className="summary-card per-person">
+                <h3>👥 1인당 분담액</h3>
+                <div className="value">
+                  {formatAmount(summary.per_person)}
+                  <span className="unit">원</span>
+                </div>
+                <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  {summary.num_participants}명 기준 (공동 경비만)
+                </p>
+              </div>
+            )}
+
+            <div className="summary-card">
+              <h3>📊 카테고리별 지출</h3>
+              <div className="category-breakdown">
+                {summary.category_totals && Object.entries(summary.category_totals)
+                  .filter(([_, amount]) => amount > 0)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([category, amount]) => (
+                    <div key={category} className="category-item">
+                      <div className="category-header">
+                        <span className="category-name">{category}</span>
+                        <span className="category-amount">₩{formatAmount(amount)}</span>
+                      </div>
+                      <div className="category-bar">
+                        <div
+                          className="category-bar-fill"
+                          style={{ width: `${(amount / summary.total_krw) * 100}%` }}
+                        ></div>
+                      </div>
                     </div>
-                    <div className="category-bar">
-                      <div 
-                        className="category-bar-fill" 
-                        style={{ 
-                          width: `${(amount / summary.total_krw) * 100}%` 
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+              </div>
             </div>
           </div>
-        </div>
 
-        {!isSingleParticipant && (
-          <div className="summary-card settlement-card-full">
-            <h3>💸 정산 내역</h3>
+          {!isSingleParticipant && (
+            <div className="summary-card settlement-card-full">
+              <h3>💸 정산 내역</h3>
               <div className="settlements">
                 {summary.settlements && Object.entries(summary.settlements).map(([name, data]) => (
-                  <div 
-                    key={name} 
+                  <div
+                    key={name}
                     className={`settlement-item ${data.difference > 0 ? 'pay' : data.difference < 0 ? 'receive' : 'settled'}`}
                   >
                     <div className="settlement-info">
@@ -1187,28 +1064,27 @@ function App() {
                 ))}
               </div>
             </div>
-        )}
+          )}
 
-        <div className="report-actions">
-          <button 
-            className="btn btn-download" 
-            onClick={handleDownloadReport}
-            disabled={loading || expenses.length === 0}
-          >
-            {loading ? '다운로드 중...' : '📊 엑셀로 다운로드'}
-          </button>
-          <button 
-            className="btn btn-download btn-download-receipt" 
-            onClick={handleDownloadReceipts}
-            disabled={loading || expenses.length === 0}
-          >
-            {loading ? '다운로드 중...' : '🧾 영수증 첨부 다운로드'}
-          </button>
-        </div>
+          <div className="report-actions">
+            <button
+              className="btn btn-download"
+              onClick={handleDownloadReport}
+              disabled={loading || expenses.length === 0}
+            >
+              {loading ? '다운로드 중...' : '📊 엑셀로 다운로드'}
+            </button>
+            <button
+              className="btn btn-download btn-download-receipt"
+              onClick={handleDownloadReceipts}
+              disabled={loading || expenses.length === 0}
+            >
+              {loading ? '다운로드 중...' : '🧾 영수증 첨부 다운로드'}
+            </button>
+          </div>
         </>
       )}
 
-      {/* 설정 모달 */}
       {showSettings && (
         <div className="modal-overlay" onClick={() => setShowSettings(false)}>
           <div className="modal modal-large" onClick={(e) => e.stopPropagation()}>
@@ -1216,25 +1092,23 @@ function App() {
               <h2>⚙️ 설정</h2>
               <button className="modal-close" onClick={() => setShowSettings(false)}>×</button>
             </div>
-            
-            {/* 탭 네비게이션 */}
+
             <div className="modal-tabs">
-              <button 
+              <button
                 className={`modal-tab ${settingsTab === 'current' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('current')}
               >
                 📝 현재 여행 설정
               </button>
-              <button 
+              <button
                 className={`modal-tab ${settingsTab === 'trips' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('trips')}
               >
                 📂 저장된 여행 ({trips.length})
               </button>
             </div>
-            
+
             <div className="modal-body">
-              {/* 현재 여행 설정 탭 */}
               {settingsTab === 'current' && (
                 <>
                   <div className="form-group">
@@ -1247,7 +1121,7 @@ function App() {
                       placeholder="예: 2024 일본 여행"
                     />
                   </div>
-                  
+
                   <div className="form-group">
                     <label>참가자 (쉼표로 구분)</label>
                     <input
@@ -1259,9 +1133,9 @@ function App() {
                     />
                     <small className="form-hint">- 정산에 참여할 사람들의 이름을 쉼표로 구분하여 입력하세요</small>
                     <small className="form-hint">- 경비를 주로 집행할 분의 성함을 맨 앞에 입력해주세요.</small>
-                    <small className="form-hint" style={{color: 'orange'}}>* 참가자를 한 사람만 입력하면, 총무 1인용 정산 도구가 됩니다.</small>
+                    <small className="form-hint" style={{ color: 'orange' }}>* 참가자를 한 사람만 입력하면, 총무 1인용 정산 도구가 됩니다.</small>
                   </div>
-                  
+
                   <div className="form-group">
                     <label>지출 항목 (쉼표로 구분)</label>
                     <input
@@ -1273,9 +1147,9 @@ function App() {
                     />
                     <small className="form-hint">- 지출 분류를 쉼표로 구분하여 입력하세요. <br/>- AI가 자동으로 분류해드립니다.</small>
                   </div>
-                  
+
                   <div className="form-group">
-                    <label>신용카드 수수료율 (%)</label>
+                    <label>신용카드 수수료율 (%) — 내 계정</label>
                     <input
                       type="number"
                       name="credit_card_fee_rate"
@@ -1287,39 +1161,36 @@ function App() {
                       placeholder="2.5"
                     />
                     <small className="form-hint">- 해외 결제 시 추가되는 수수료율을 입력하세요</small>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label>🔑 Google API Key</label>
-                    <input
-                      type="password"
-                      name="google_api_key"
-                      value={settingsForm.google_api_key}
-                      onChange={handleSettingsChange}
-                      placeholder="AIza..."
-                    />
-                    <small className="form-hint">- 영수증 OCR 분석을 위한 Google API 키를 입력하세요 (Gemini 2.5 Flash)</small>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label>🏦 한국수출입은행 API Key (선택)</label>
-                    <input
-                      type="password"
-                      name="koreaexim_api_key"
-                      value={settingsForm.koreaexim_api_key}
-                      onChange={handleSettingsChange}
-                      placeholder="API 키 입력..."
-                    />
-                    <small className="form-hint">
-                      - 공식 환율 데이터를 위한 API 키입니다. 미입력시 무료 API로 자동 대체됩니다.
-                      <a href="https://www.koreaexim.go.kr/ir/HPHKIR019M01#tab1" 
-                         target="_blank" rel="noopener noreferrer"
-                         style={{ marginLeft: '4px', color: 'var(--accent)' }}>
-                        무료 발급
-                      </a>
+                    <small className="form-hint">- 이 값은 <strong>내 계정</strong>에 저장되며, 모든 여행에 공통으로 적용됩니다</small>
+                    <small className="form-hint" style={{ color: 'orange' }}>
+                      ※ 해외 결제의 경우 건별, 결제금액별 수수료가 추가됩니다.
+                      카드사마다 서로 달리 적용되니 확인해서 입력하시기 바랍니다.
                     </small>
                   </div>
-                  
+
+                  <div style={{
+                    background: 'rgba(255, 195, 0, 0.08)',
+                    border: '1px solid rgba(255, 195, 0, 0.3)',
+                    padding: '12px 14px', borderRadius: 8,
+                    fontSize: 12, color: 'var(--text-muted)',
+                    marginTop: 8, marginBottom: 16,
+                  }}>
+                    🔐 Google API Key와 한국수출입은행 API Key는 관리자가 일괄 관리합니다.
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => { setShowSettings(false); setShowAdminSettings(true); }}
+                        style={{
+                          marginLeft: 8, background: 'transparent', border: 'none',
+                          color: '#e94560', cursor: 'pointer', textDecoration: 'underline',
+                          fontSize: 12,
+                        }}
+                      >
+                        관리자 페이지 열기 →
+                      </button>
+                    )}
+                  </div>
+
                   <div className="new-trip-section">
                     <button className="btn btn-new-trip" onClick={openNewTripConfirm}>
                       ✨ 새 여행 시작하기
@@ -1330,8 +1201,7 @@ function App() {
                   </div>
                 </>
               )}
-              
-              {/* 저장된 여행 목록 탭 */}
+
               {settingsTab === 'trips' && (
                 <div className="trips-list">
                   {trips.length === 0 ? (
@@ -1343,25 +1213,35 @@ function App() {
                       </p>
                     </div>
                   ) : (
-                    trips.map(trip => (
+                    trips.map((trip) => (
                       <div key={trip.id} className="trip-item">
                         <div className="trip-info">
-                          <div className="trip-title">{trip.title}</div>
+                          <div className="trip-title">
+                            {trip.title}
+                            {trip.is_active && (
+                              <span style={{
+                                marginLeft: 8, padding: '2px 8px', borderRadius: 999,
+                                background: '#00d9a5', color: '#fff', fontSize: 10,
+                              }}>현재</span>
+                            )}
+                          </div>
                           <div className="trip-meta">
-                            <span>📅 {formatDate(trip.archived_at)}</span>
+                            <span>📅 {formatDate(trip.created_at)}</span>
                             <span>📋 {trip.expense_count}건</span>
                             <span>💰 ₩{formatAmount(trip.total_krw)}</span>
                           </div>
                         </div>
                         <div className="trip-actions">
-                          <button 
-                            className="btn btn-trip-load"
-                            onClick={() => handleLoadTrip(trip.id)}
-                            disabled={loading}
-                          >
-                            불러오기
-                          </button>
-                          <button 
+                          {!trip.is_active && (
+                            <button
+                              className="btn btn-trip-load"
+                              onClick={() => handleLoadTrip(trip.id)}
+                              disabled={loading}
+                            >
+                              불러오기
+                            </button>
+                          )}
+                          <button
                             className="btn btn-trip-delete"
                             onClick={() => handleDeleteTrip(trip.id, trip.title)}
                           >
@@ -1374,7 +1254,7 @@ function App() {
                 </div>
               )}
             </div>
-            
+
             {settingsTab === 'current' && (
               <div className="modal-footer">
                 <button className="btn btn-secondary" onClick={() => setShowSettings(false)}>
@@ -1389,7 +1269,6 @@ function App() {
         </div>
       )}
 
-      {/* 새 여행 생성 확인 모달 */}
       {showNewTripConfirm && (
         <div className="modal-overlay" onClick={() => setShowNewTripConfirm(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -1399,12 +1278,12 @@ function App() {
             </div>
             <div className="modal-body">
               <div className="confirm-message">
-                <p>⚠️ 새 여행을 시작하면 현재 데이터가 저장되고 초기화됩니다.</p>
+                <p>⚠️ 새 여행을 시작하면 현재 여행이 저장되고 새 여행이 활성 상태가 됩니다.</p>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
                   저장된 여행은 설정 &gt; 저장된 여행 탭에서 다시 불러올 수 있습니다.
                 </p>
               </div>
-              
+
               <div className="form-group" style={{ marginTop: '1.5rem' }}>
                 <label>새 여행 타이틀 *</label>
                 <input
@@ -1412,11 +1291,11 @@ function App() {
                   name="trip_title"
                   value={newTripForm.trip_title}
                   onChange={handleNewTripFormChange}
-                  placeholder="예: 2025 유럽 여행"
+                  placeholder="예: 2026 유럽 여행"
                   autoFocus
                 />
               </div>
-              
+
               <div className="form-group">
                 <label>참가자 (쉼표로 구분) *</label>
                 <input
@@ -1427,7 +1306,7 @@ function App() {
                   placeholder="예: 홍길동, 김철수, 이영희"
                 />
               </div>
-              
+
               <div className="form-group">
                 <label>지출 항목 (쉼표로 구분)</label>
                 <input
@@ -1438,27 +1317,14 @@ function App() {
                   placeholder="예: 교통비, 식사비, 숙박비, 기타"
                 />
               </div>
-              
-              <div className="form-group">
-                <label>신용카드 수수료율 (%)</label>
-                <input
-                  type="number"
-                  name="credit_card_fee_rate"
-                  value={newTripForm.credit_card_fee_rate}
-                  onChange={handleNewTripFormChange}
-                  step="0.1"
-                  min="0"
-                  max="10"
-                />
-              </div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setShowNewTripConfirm(false)}>
                 취소
               </button>
-              <button 
-                className="btn btn-primary" 
-                onClick={handleCreateNewTrip} 
+              <button
+                className="btn btn-primary"
+                onClick={handleCreateNewTrip}
                 disabled={loading || !newTripForm.trip_title.trim() || !newTripForm.participants.trim()}
               >
                 {loading ? <div className="loading"></div> : '새 여행 시작'}
@@ -1468,7 +1334,6 @@ function App() {
         </div>
       )}
 
-      {/* 통화 추가/수정 모달 */}
       {showCurrencyModal && (
         <div className="modal-overlay" onClick={() => setShowCurrencyModal(false)}>
           <div className="modal currency-modal" onClick={(e) => e.stopPropagation()}>
@@ -1505,7 +1370,7 @@ function App() {
                   <small className="form-hint">국기 이모지 (예: 🇪🇺, 🇬🇧)</small>
                 </div>
               </div>
-              
+
               <div className="form-row">
                 <div className="form-group">
                   <label>통화 이름</label>
@@ -1531,7 +1396,7 @@ function App() {
                   <small className="form-hint">1 외화 = ? 원</small>
                 </div>
               </div>
-              
+
               {currencyForm.code && currencyForm.rate && (
                 <div className="currency-preview">
                   <span>{currencyForm.flag} 1 {currencyForm.code.toUpperCase()} = </span>
@@ -1551,7 +1416,6 @@ function App() {
         </div>
       )}
 
-      {/* 영수증 이미지 모달 */}
       {receiptModalImage && (
         <div className="modal-overlay" onClick={() => setReceiptModalImage(null)}>
           <div className="modal receipt-modal" onClick={(e) => e.stopPropagation()}>
@@ -1574,7 +1438,20 @@ function App() {
         </div>
       )}
 
-      {/* 푸터 */}
+      <AdminPanel
+        open={showAdminSettings}
+        onClose={() => setShowAdminSettings(false)}
+      />
+
+      <PasswordSetupModal
+        open={isAuthenticated && !hasPassword}
+      />
+
+      <UsageGuide
+        open={showUsageGuide}
+        onClose={() => setShowUsageGuide(false)}
+      />
+
       <footer className="site-footer">
         <div className="footer-content">
           <div className="footer-left">
@@ -1591,7 +1468,6 @@ function App() {
         </div>
       </footer>
 
-      {/* 토스트 메시지 */}
       {toast && (
         <div className={`toast ${toast.type}`}>
           {toast.message}

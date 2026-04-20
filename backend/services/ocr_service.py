@@ -1,34 +1,21 @@
-import base64
 import re
 import json
 import logging
 from datetime import datetime
-from typing import Optional
 import google.generativeai as genai
 from PIL import Image
 from config import Config
 
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
 def get_google_api_key() -> str:
-    """
-    Google API 키를 가져옵니다.
-    1. Config에서 먼저 확인 (환경변수 또는 런타임 설정)
-    2. 없으면 settings 파일에서 확인
-    """
-    if Config.GOOGLE_API_KEY:
-        return Config.GOOGLE_API_KEY
-    
-    from services.database import load_settings
-    settings = load_settings()
-    api_key = settings.get('google_api_key', '')
-    
+    """전역 admin 설정에서 Google API 키 조회. 없으면 환경 변수 폴백."""
+    from services.app_settings_service import get_app_settings
+    api_key = (get_app_settings().get('google_api_key') or '').strip()
     if api_key:
-        Config.GOOGLE_API_KEY = api_key
-    
-    return api_key
+        return api_key
+    return Config.GOOGLE_API_KEY or ''
 
 
 def analyze_receipt_with_gemini(image_path: str) -> dict:
@@ -37,23 +24,23 @@ def analyze_receipt_with_gemini(image_path: str) -> dict:
     일본어, 한국어, 영어 영수증을 지원합니다.
     """
     logger.info(f"영수증 분석 시작: {image_path}")
-    
+
     api_key = get_google_api_key()
-    
+
     if not api_key:
         logger.error("Google API 키가 설정되지 않았습니다.")
         return {
             'success': False,
-            'error': 'Google API 키가 설정되지 않았습니다. 설정에서 Google API Key를 입력해주세요.',
+            'error': 'Google API 키가 설정되지 않았습니다. 관리자에게 문의하세요.',
             'data': None
         }
-    
+
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.5-flash')
-        
+
         img = Image.open(image_path)
-        
+
         prompt = """당신은 다국어 영수증 OCR 분석 전문가입니다.
 
 ## 전문 분야
@@ -140,10 +127,10 @@ def analyze_receipt_with_gemini(image_path: str) -> dict:
 JSON만 반환해주세요."""
 
         response = model.generate_content([prompt, img])
-        
+
         result_text = response.text.strip()
         logger.info(f"Gemini 응답 수신: {result_text[:100]}...")
-        
+
         json_match = re.search(r'```json\s*([\s\S]*?)\s*```', result_text)
         if json_match:
             result_text = json_match.group(1)
@@ -151,23 +138,23 @@ JSON만 반환해주세요."""
             json_match = re.search(r'\{[\s\S]*\}', result_text)
             if json_match:
                 result_text = json_match.group(0)
-        
+
         parsed_result = json.loads(result_text)
-        
+
         date_str = parsed_result.get('date', datetime.now().strftime('%Y-%m-%d'))
         try:
             datetime.strptime(date_str, '%Y-%m-%d')
         except ValueError:
             logger.warning(f"잘못된 날짜 형식: {date_str}, 오늘 날짜로 대체")
             date_str = datetime.now().strftime('%Y-%m-%d')
-        
+
         raw_date = parsed_result.get('raw_date_text', '')
         detected_lang = parsed_result.get('detected_language', '')
         if raw_date:
             logger.info(f"원본 날짜 텍스트: {raw_date}")
         if detected_lang:
             logger.info(f"감지된 언어: {detected_lang}")
-        
+
         return {
             'success': True,
             'error': None,
@@ -182,7 +169,7 @@ JSON만 반환해주세요."""
                 'raw_date_text': raw_date
             }
         }
-        
+
     except json.JSONDecodeError as e:
         logger.error(f"JSON 파싱 오류: {str(e)}")
         return {
@@ -201,11 +188,11 @@ JSON만 반환해주세요."""
         error_msg = str(e)
         error_type = type(e).__name__
         logger.error(f"영수증 분석 오류: {error_type}: {error_msg}")
-        
+
         if 'API_KEY_INVALID' in error_msg or 'PERMISSION_DENIED' in error_msg:
             return {
                 'success': False,
-                'error': 'Google API 키가 유효하지 않습니다. API 키를 확인해주세요.',
+                'error': 'Google API 키가 유효하지 않습니다. 관리자에게 문의하세요.',
                 'data': None
             }
         if 'RESOURCE_EXHAUSTED' in error_msg or 'quota' in error_msg.lower():
@@ -214,7 +201,7 @@ JSON만 반환해주세요."""
                 'error': 'Google API 요청 한도가 초과되었습니다. 잠시 후 다시 시도해주세요.',
                 'data': None
             }
-        
+
         return {
             'success': False,
             'error': f'영수증 분석 오류: {error_type}: {error_msg}',
@@ -222,22 +209,33 @@ JSON만 반환해주세요."""
         }
 
 
-def calculate_krw_amount(amount: float, currency: str, payment_method: str) -> tuple[float, float]:
+def calculate_krw_amount(amount: float, currency: str, payment_method: str,
+                         settings: dict = None,
+                         credit_card_fee_rate: float = None) -> tuple:
     """
     원화 환산액을 계산합니다.
-    신용카드 결제 시 설정된 수수료율을 추가합니다.
+    신용카드 결제 시 지정된 수수료율(%)을 추가합니다.
     Returns (krw_amount, exchange_rate)
+
+    - ``settings``: 트립 settings (환율 조회용).
+    - ``credit_card_fee_rate``: 사용자 프로필 수수료율(%). 미지정 시 settings의
+      ``credit_card_fee_rate``, 그것도 없으면 2.5%.
     """
-    from services.database import load_settings
-    
-    settings = load_settings()
+    if settings is None:
+        settings = {}
     exchange_rates = settings.get('exchange_rates', Config.EXCHANGE_RATES)
-    credit_card_fee_rate = settings.get('credit_card_fee_rate', 2.5) / 100.0
-    
+
+    if credit_card_fee_rate is None:
+        credit_card_fee_rate = settings.get('credit_card_fee_rate', 2.5)
+    try:
+        fee_rate_pct = float(credit_card_fee_rate)
+    except (TypeError, ValueError):
+        fee_rate_pct = 2.5
+
     exchange_rate = exchange_rates.get(currency, 1.0)
     krw_amount = amount * exchange_rate
-    
+
     if payment_method == '신용카드':
-        krw_amount *= (1 + credit_card_fee_rate)
-    
+        krw_amount *= (1 + fee_rate_pct / 100.0)
+
     return round(krw_amount), exchange_rate
