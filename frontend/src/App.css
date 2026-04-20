@@ -325,6 +325,15 @@ body {
   font-family: inherit;
   font-size: 0.95rem;
   transition: border-color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.form-group input[type="date"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  display: block;
+  text-align: left;
 }
 
 .form-group input:focus,
@@ -1728,6 +1737,23 @@ body {
     min-width: 0;
     width: 100%;
     max-width: 100%;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    display: block;
+    padding: 0.75rem 0.85rem;
+  }
+
+  .form-group input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .form-group input[type="date"]::-webkit-calendar-picker-indicator {
+    margin-left: auto;
+    padding: 0;
   }
 
   .rate-item {
