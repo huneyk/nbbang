@@ -86,12 +86,13 @@ function App() {
   const loadData = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
-      const [expensesRes, summaryRes, configRes, settingsRes, currenciesRes] = await Promise.all([
+      const [expensesRes, summaryRes, configRes, settingsRes, currenciesRes, tripsRes] = await Promise.all([
         apiClient.get('/api/expenses'),
         apiClient.get('/api/summary'),
         apiClient.get('/api/config'),
         apiClient.get('/api/settings'),
         apiClient.get('/api/currencies'),
+        apiClient.get('/api/trips'),
       ]);
 
       setExpenses(expensesRes.data.data);
@@ -127,6 +128,19 @@ function App() {
             payer: currentPayerValid ? prev.payer : loadedSettings.participants[0],
           };
         });
+      }
+
+      const tripList = tripsRes.data.data || [];
+      setTrips(tripList);
+
+      // 트립이 하나도 없으면(최초 로그인) 새 여행 시작 모달을 자동으로 연다.
+      if (tripList.length === 0) {
+        setNewTripForm({
+          trip_title: '',
+          participants: '',
+          categories: '교통비, 식사비, 음료/간식, 숙박비, 기타',
+        });
+        setShowNewTripConfirm(true);
       }
     } catch (error) {
       console.error('데이터 로드 오류:', error);
@@ -579,8 +593,8 @@ function App() {
           <h1>🌏 {settings.trip_title || '여행 경비 정산'}</h1>
           <p>"N빵 하자!" 영수증만 찰칵! 여행 경비 정산 실시간으로 끝!</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+        <div className="navbar-actions">
+          <span className="user-chip">
             👤 {user?.name || user?.email}
             {isAdmin && <span style={{
               marginLeft: 6, padding: '2px 8px', borderRadius: 999,
@@ -1273,15 +1287,26 @@ function App() {
         <div className="modal-overlay" onClick={() => setShowNewTripConfirm(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>✨ 새 여행 시작</h2>
+              <h2>{trips.length === 0 ? '✨ 첫 여행 시작하기' : '✨ 새 여행 시작'}</h2>
               <button className="modal-close" onClick={() => setShowNewTripConfirm(false)}>×</button>
             </div>
             <div className="modal-body">
               <div className="confirm-message">
-                <p>⚠️ 새 여행을 시작하면 현재 여행이 저장되고 새 여행이 활성 상태가 됩니다.</p>
-                <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                  저장된 여행은 설정 &gt; 저장된 여행 탭에서 다시 불러올 수 있습니다.
-                </p>
+                {trips.length === 0 ? (
+                  <>
+                    <p>👋 환영합니다! 여행 경비 정산을 시작해볼까요?</p>
+                    <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                      여행 타이틀과 참가자를 입력하면 경비 입력을 시작할 수 있습니다.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>⚠️ 새 여행을 시작하면 현재 여행이 저장되고 새 여행이 활성 상태가 됩니다.</p>
+                    <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                      저장된 여행은 설정 &gt; 저장된 여행 탭에서 다시 불러올 수 있습니다.
+                    </p>
+                  </>
+                )}
               </div>
 
               <div className="form-group" style={{ marginTop: '1.5rem' }}>

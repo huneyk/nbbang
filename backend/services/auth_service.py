@@ -221,7 +221,8 @@ def verify_code_and_login(email: str, code: str, purpose: str,
             user = user_repository.find_by_id(user['id']) or user
         user_repository.touch_login(user['id'])
 
-    trip_repository.get_or_create_active_trip(user['id'], default_title='새 여행')
+    # 신규 사용자/로그인 시점에는 비어있는 '새 여행'을 만들지 않는다.
+    # 프론트엔드가 트립 미존재를 감지하여 새 여행 생성 모달을 자동으로 열어 준다.
 
     return user, _issue_token(user)
 
@@ -247,7 +248,6 @@ def login_with_password(email: str, password: str) -> Tuple[Dict[str, Any], str]
         raise AuthError('이메일 또는 비밀번호가 올바르지 않습니다.', 401)
 
     user_repository.touch_login(user['id'])
-    trip_repository.get_or_create_active_trip(user['id'], default_title='새 여행')
 
     return user, _issue_token(user)
 
