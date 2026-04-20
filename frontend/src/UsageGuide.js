@@ -1,4 +1,28 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+
+function useIsMobile(breakpoint = 760) {
+  const getMatch = () =>
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia(`(max-width: ${breakpoint}px)`).matches;
+
+  const [isMobile, setIsMobile] = useState(getMatch);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mql = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const handler = (e) => setIsMobile(e.matches);
+    setIsMobile(mql.matches);
+    if (mql.addEventListener) mql.addEventListener('change', handler);
+    else mql.addListener(handler);
+    return () => {
+      if (mql.removeEventListener) mql.removeEventListener('change', handler);
+      else mql.removeListener(handler);
+    };
+  }, [breakpoint]);
+
+  return isMobile;
+}
 
 const SECTIONS = [
   { id: 'quickstart', icon: '🚀', title: '빠른 시작' },
@@ -15,6 +39,7 @@ const SECTIONS = [
 
 export default function UsageGuide({ open, onClose }) {
   const [activeId, setActiveId] = useState('quickstart');
+  const isMobile = useIsMobile();
 
   if (!open) return null;
 
@@ -26,38 +51,47 @@ export default function UsageGuide({ open, onClose }) {
 
   return (
     <div style={styles.backdrop} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.header}>
+      <div
+        style={{ ...styles.modal, ...(isMobile ? styles.modalMobile : {}) }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ ...styles.header, ...(isMobile ? styles.headerMobile : {}) }}>
           <div style={styles.titleWrap}>
             <span style={styles.titleEmoji}>📖</span>
             <div>
               <h2 style={styles.title}>Npang 사용법 안내</h2>
-              <p style={styles.subtitle}>영수증만 찰칵! 여행 경비 정산, 이렇게 사용하세요.</p>
+              {!isMobile && (
+                <p style={styles.subtitle}>영수증만 찰칵! 여행 경비 정산, 이렇게 사용하세요.</p>
+              )}
             </div>
           </div>
           <button type="button" onClick={onClose} style={styles.closeBtn} aria-label="닫기">✕</button>
         </div>
 
-        <div style={styles.body}>
-          <aside style={styles.nav}>
-            <div style={styles.navTitle}>목차</div>
-            {SECTIONS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => handleJump(s.id)}
-                style={{
-                  ...styles.navItem,
-                  ...(activeId === s.id ? styles.navItemActive : {}),
-                }}
-              >
-                <span style={styles.navIcon}>{s.icon}</span>
-                <span>{s.title}</span>
-              </button>
-            ))}
+        <div style={{ ...styles.body, ...(isMobile ? styles.bodyMobile : {}) }}>
+          <aside style={isMobile ? styles.navMobile : styles.nav}>
+            {!isMobile && <div style={styles.navTitle}>목차</div>}
+            <div style={isMobile ? styles.navListMobile : undefined}>
+              {SECTIONS.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => handleJump(s.id)}
+                  style={{
+                    ...(isMobile ? styles.navItemMobile : styles.navItem),
+                    ...(activeId === s.id
+                      ? (isMobile ? styles.navItemActiveMobile : styles.navItemActive)
+                      : {}),
+                  }}
+                >
+                  <span style={styles.navIcon}>{s.icon}</span>
+                  <span>{s.title}</span>
+                </button>
+              ))}
+            </div>
           </aside>
 
-          <section style={styles.content}>
+          <section style={{ ...styles.content, ...(isMobile ? styles.contentMobile : {}) }}>
             <Section id="quickstart" icon="🚀" title="빠른 시작">
               <div style={styles.quickstartCard}>
                 <p style={styles.quickstartLead}>
@@ -343,11 +377,18 @@ const styles = {
     overflow: 'hidden',
     display: 'flex', flexDirection: 'column',
   },
+  modalMobile: {
+    maxHeight: '96vh',
+    borderRadius: 12,
+  },
   header: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '18px 22px',
     borderBottom: '1px solid #c5e1cf',
     background: 'linear-gradient(135deg, #f0f9f4 0%, #e4f3eb 100%)',
+  },
+  headerMobile: {
+    padding: '12px 14px',
   },
   titleWrap: { display: 'flex', alignItems: 'center', gap: 14 },
   titleEmoji: { fontSize: 32 },
@@ -370,6 +411,9 @@ const styles = {
     flex: 1,
     minHeight: 0,
   },
+  bodyMobile: {
+    flexDirection: 'column',
+  },
   nav: {
     width: 220,
     flexShrink: 0,
@@ -377,6 +421,42 @@ const styles = {
     borderRight: '1px solid #e4f3eb',
     background: '#fbfefc',
     overflowY: 'auto',
+  },
+  navMobile: {
+    width: '100%',
+    flexShrink: 0,
+    padding: '8px 10px',
+    borderBottom: '1px solid #e4f3eb',
+    background: '#fbfefc',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    WebkitOverflowScrolling: 'touch',
+  },
+  navListMobile: {
+    display: 'flex',
+    gap: 6,
+    flexWrap: 'nowrap',
+    width: 'max-content',
+  },
+  navItemMobile: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+    padding: '7px 12px',
+    background: '#ffffff',
+    border: '1px solid #c5e1cf',
+    borderRadius: 999,
+    cursor: 'pointer',
+    fontSize: 13,
+    color: '#3d5c47',
+    whiteSpace: 'nowrap',
+  },
+  navItemActiveMobile: {
+    background: '#e4f3eb',
+    borderColor: '#27ae60',
+    color: '#27ae60',
+    fontWeight: 700,
   },
   navTitle: {
     fontSize: 11, fontWeight: 700, color: '#7a9b85',
@@ -406,6 +486,9 @@ const styles = {
     overflowY: 'auto',
     color: '#1a2e22',
     lineHeight: 1.65,
+  },
+  contentMobile: {
+    padding: '14px 16px 22px',
   },
   section: { marginBottom: 28 },
   sectionTitle: {
