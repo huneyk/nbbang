@@ -7,6 +7,7 @@ import LoginPage from './auth/LoginPage';
 import PasswordSetupModal from './auth/PasswordSetupModal';
 import AdminPanel from './admin/AdminPanel';
 import UsageGuide from './UsageGuide';
+import { InstallButton } from './InstallPrompt';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
@@ -641,6 +642,7 @@ function App() {
           >
             📖 사용법
           </button>
+          <InstallButton className="navbar-install-btn" />
           <button
             type="button"
             onClick={logout}
