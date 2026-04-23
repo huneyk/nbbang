@@ -1,6 +1,6 @@
 import os
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
 
 import requests
@@ -167,7 +167,7 @@ def fetch_exchange_rates(settings: dict) -> dict:
     return {
         'rates': rates,
         'source': source or '조회 실패',
-        'updated_at': datetime.now().isoformat(),
+        'updated_at': datetime.now(timezone.utc).isoformat(),
         'rate_type': '현찰살때 (추정)',
     }
 

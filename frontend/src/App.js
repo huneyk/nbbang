@@ -11,6 +11,15 @@ import { InstallButton } from './InstallPrompt';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
+// 백엔드가 타임존 정보 없는 ISO 문자열을 보내는 경우 UTC로 간주해 해석한다.
+const parseServerDate = (value) => {
+  if (!value) return null;
+  const hasTimezone = /Z|[+-]\d{2}:?\d{2}$/.test(value);
+  const normalized = hasTimezone ? value : `${value}Z`;
+  const parsed = new Date(normalized);
+  return isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const buildAuthedUrl = (path) => {
   const token = tokenStorage.get();
   const sep = path.includes('?') ? '&' : '?';
@@ -913,11 +922,11 @@ function App() {
                   </button>
                 </div>
 
-                {exchangeRateInfo.updated_at && (
+                {exchangeRateInfo.updated_at && parseServerDate(exchangeRateInfo.updated_at) && (
                   <div className="exchange-rate-info">
                     <span className="rate-info-label">마지막 갱신:</span>
                     <span className="rate-info-value">
-                      {new Date(exchangeRateInfo.updated_at).toLocaleString('ko-KR', {
+                      {parseServerDate(exchangeRateInfo.updated_at).toLocaleString('ko-KR', {
                         year: 'numeric', month: '2-digit', day: '2-digit',
                         hour: '2-digit', minute: '2-digit',
                         timeZone: 'Asia/Seoul',

@@ -13,11 +13,14 @@ const formatNumber = (value) => new Intl.NumberFormat('ko-KR').format(Math.round
 const formatDateTime = (iso) => {
   if (!iso) return '-';
   try {
-    const d = new Date(iso);
+    // 서버가 타임존 정보 없는 ISO 문자열을 보내면 UTC로 간주해 해석한다.
+    const hasTimezone = /Z|[+-]\d{2}:?\d{2}$/.test(iso);
+    const d = new Date(hasTimezone ? iso : `${iso}Z`);
     if (Number.isNaN(d.getTime())) return iso;
     return d.toLocaleString('ko-KR', {
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit',
+      timeZone: 'Asia/Seoul',
     });
   } catch (_) {
     return iso;
