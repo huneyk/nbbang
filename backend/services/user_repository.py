@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 from bson import ObjectId
 
-DEFAULT_CREDIT_CARD_FEE_RATE = 2.5
+DEFAULT_CREDIT_CARD_FEE_RATE = 0.0
 
 
 def _coerce_fee_rate(value: Any,

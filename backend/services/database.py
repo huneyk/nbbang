@@ -19,7 +19,7 @@ DEFAULT_SETTINGS = {
     'trip_title': '여행 경비 정산',
     'participants': ['참가자1', '참가자2'],
     'categories': ['교통비', '식사비', '음료/간식', '숙박비', '기타'],
-    'credit_card_fee_rate': 2.5,
+    'credit_card_fee_rate': 0.0,
     'google_api_key': '',
     'koreaexim_api_key': '',
     'currencies': [
@@ -170,7 +170,7 @@ def archive_current_trip() -> Optional[str]:
 
 
 def create_new_trip(new_title: str, participants: List[str] = None,
-                    categories: List[str] = None, credit_card_fee_rate: float = 2.5) -> Dict[str, Any]:
+                    categories: List[str] = None, credit_card_fee_rate: float = 0.0) -> Dict[str, Any]:
     """새로운 여행 생성 (현재 데이터 초기화)"""
     new_settings = {
         'trip_id': None,

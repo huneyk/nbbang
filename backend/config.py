@@ -50,7 +50,7 @@ class Config:
     SCHEDULER_API_ENABLED = False
 
     # 신용카드 수수료율
-    CREDIT_CARD_FEE_RATE = 0.025  # 2.5%
+    CREDIT_CARD_FEE_RATE = 0.0  # 기본 0% (해외 결제 시에만 사용자가 직접 설정)
 
     # 참가자 명단 (신규 트립 기본값)
     PARTICIPANTS = ['공훈의', '최철기', '이태수', '강경수']

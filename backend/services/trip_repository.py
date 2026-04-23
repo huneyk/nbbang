@@ -72,7 +72,7 @@ def _serialize(doc: Optional[Dict]) -> Optional[Dict]:
     return doc
 
 
-DEFAULT_CREDIT_CARD_FEE_RATE = 2.5
+DEFAULT_CREDIT_CARD_FEE_RATE = 0.0
 
 
 def _default_settings(trip_title: str = '여행 경비 정산',
@@ -143,7 +143,7 @@ def _apply_latest_rates_to_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
 def create_trip(user_id: str, trip_title: str,
                 participants: Optional[List[str]] = None,
                 categories: Optional[List[str]] = None,
-                credit_card_fee_rate: float = 2.5,
+                credit_card_fee_rate: float = DEFAULT_CREDIT_CARD_FEE_RATE,
                 make_active: bool = True) -> Dict[str, Any]:
     """새 트립 생성. make_active=True이면 기존 active 트립을 비활성화한다.
 

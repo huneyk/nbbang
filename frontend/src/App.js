@@ -55,7 +55,7 @@ function App() {
     trip_title: '여행 경비 정산',
     participants: '',
     categories: '',
-    credit_card_fee_rate: 2.5,
+    credit_card_fee_rate: 0,
   });
 
   const [currencyForm, setCurrencyForm] = useState({
@@ -118,7 +118,7 @@ function App() {
         trip_title: loadedSettings.trip_title || '여행 경비 정산',
         participants: (loadedSettings.participants || []).join(', '),
         categories: (loadedSettings.categories || []).join(', '),
-        credit_card_fee_rate: loadedSettings.credit_card_fee_rate || 2.5,
+        credit_card_fee_rate: loadedSettings.credit_card_fee_rate ?? 0,
       });
 
       if (loadedSettings.participants?.length > 0) {
@@ -402,7 +402,7 @@ function App() {
       trip_title: settings.trip_title || '여행 경비 정산',
       participants: (settings.participants || []).join(', '),
       categories: (settings.categories || []).join(', '),
-      credit_card_fee_rate: settings.credit_card_fee_rate || 2.5,
+      credit_card_fee_rate: settings.credit_card_fee_rate ?? 0,
     });
     setSettingsTab('current');
     setShowSettings(true);
@@ -416,7 +416,10 @@ function App() {
         trip_title: settingsForm.trip_title.trim() || '여행 경비 정산',
         participants: settingsForm.participants.split(',').map((p) => p.trim()).filter((p) => p),
         categories: settingsForm.categories.split(',').map((c) => c.trim()).filter((c) => c),
-        credit_card_fee_rate: parseFloat(settingsForm.credit_card_fee_rate) || 2.5,
+        credit_card_fee_rate: (() => {
+          const parsed = parseFloat(settingsForm.credit_card_fee_rate);
+          return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+        })(),
         exchange_rates: exchangeRates,
       };
       if (newSettings.participants.length === 0) {
@@ -430,16 +433,16 @@ function App() {
       await apiClient.patch('/api/auth/me', {
         credit_card_fee_rate: newSettings.credit_card_fee_rate,
       });
-      const putResponse = await apiClient.put('/api/settings', newSettings);
-      const savedSettings = putResponse?.data?.data || newSettings;
+      await apiClient.put('/api/settings', newSettings);
 
-      // 저장된 값을 state와 form 모두에 즉시 반영하여 재오픈 시에도 동일한 값이 보이도록 한다.
-      setSettings((prev) => ({ ...prev, ...savedSettings }));
+      // 사용자가 입력한 값을 그대로 state와 form에 반영.
+      // 서버 응답을 덮어 쓰지 않음으로써 0과 같은 falsy 값도 안전하게 유지된다.
+      setSettings((prev) => ({ ...prev, ...newSettings }));
       setSettingsForm({
-        trip_title: savedSettings.trip_title || '여행 경비 정산',
-        participants: (savedSettings.participants || []).join(', '),
-        categories: (savedSettings.categories || []).join(', '),
-        credit_card_fee_rate: savedSettings.credit_card_fee_rate ?? 2.5,
+        trip_title: newSettings.trip_title,
+        participants: newSettings.participants.join(', '),
+        categories: newSettings.categories.join(', '),
+        credit_card_fee_rate: newSettings.credit_card_fee_rate,
       });
 
       if (!keepOpen) setShowSettings(false);
@@ -807,7 +810,7 @@ function App() {
                   <select name="payment_method" value={formData.payment_method} onChange={handleInputChange}>
                     <option value="현금">💵 현금</option>
                     <option value="신용카드">
-                      💳 신용카드{formData.currency === 'KRW' ? '' : ` (+${settings.credit_card_fee_rate || 2.5}%)`}
+                      💳 신용카드{formData.currency === 'KRW' || !(settings.credit_card_fee_rate > 0) ? '' : ` (+${settings.credit_card_fee_rate}%)`}
                     </option>
                   </select>
                 </div>
@@ -1261,7 +1264,7 @@ function App() {
                       step="0.1"
                       min="0"
                       max="10"
-                      placeholder="2.5"
+                      placeholder="0"
                     />
                     <small className="form-hint">- 해외 결제 시 추가되는 수수료율을 입력하세요</small>
                     <small className="form-hint">- 이 값은 <strong>내 계정</strong>에 저장되며, 모든 여행에 공통으로 적용됩니다</small>
@@ -1277,7 +1280,7 @@ function App() {
                   <div className="save-current-section">
                     <button
                       className="btn btn-primary btn-save-current"
-                      onClick={() => handleSaveSettings({ keepOpen: true })}
+                      onClick={() => handleSaveSettings()}
                       disabled={loading}
                     >
                       {loading ? <div className="loading"></div> : '💾 현재 여행에 저장'}

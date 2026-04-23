@@ -220,18 +220,18 @@ def calculate_krw_amount(amount: float, currency: str, payment_method: str,
 
     - ``settings``: 트립 settings (환율 조회용).
     - ``credit_card_fee_rate``: 사용자 프로필 수수료율(%). 미지정 시 settings의
-      ``credit_card_fee_rate``, 그것도 없으면 2.5%.
+      ``credit_card_fee_rate``, 그것도 없으면 0%.
     """
     if settings is None:
         settings = {}
     exchange_rates = settings.get('exchange_rates', Config.EXCHANGE_RATES)
 
     if credit_card_fee_rate is None:
-        credit_card_fee_rate = settings.get('credit_card_fee_rate', 2.5)
+        credit_card_fee_rate = settings.get('credit_card_fee_rate', 0.0)
     try:
         fee_rate_pct = float(credit_card_fee_rate)
     except (TypeError, ValueError):
-        fee_rate_pct = 2.5
+        fee_rate_pct = 0.0
 
     exchange_rate = exchange_rates.get(currency, 1.0)
     krw_amount = amount * exchange_rate
