@@ -920,7 +920,8 @@ function App() {
                       {new Date(exchangeRateInfo.updated_at).toLocaleString('ko-KR', {
                         year: 'numeric', month: '2-digit', day: '2-digit',
                         hour: '2-digit', minute: '2-digit',
-                      })}
+                        timeZone: 'Asia/Seoul',
+                      })} (KST)
                     </span>
                     {exchangeRateInfo.source && (
                       <span className="rate-info-source">{exchangeRateInfo.source}</span>
@@ -1521,6 +1522,22 @@ function App() {
               <button className="btn btn-primary" onClick={handleSaveCurrency} disabled={loading}>
                 {loading ? <div className="loading"></div> : (editingCurrency ? '수정' : '추가')}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {analyzing && (
+        <div className="modal-overlay ai-analyzing-overlay">
+          <div className="modal ai-analyzing-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="ai-analyzing-body">
+              <div className="ai-analyzing-spinner" aria-hidden="true"></div>
+              <div className="ai-analyzing-icon" aria-hidden="true">🧾</div>
+              <h3 className="ai-analyzing-title">AI가 영수증을 읽고 있습니다</h3>
+              <p className="ai-analyzing-subtitle">잠시만 기다려주세요</p>
+              <div className="ai-analyzing-dots" aria-hidden="true">
+                <span></span><span></span><span></span>
+              </div>
             </div>
           </div>
         </div>
