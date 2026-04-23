@@ -1327,8 +1327,25 @@ body {
 }
 
 /* 새 여행 버튼 섹션 */
-.new-trip-section {
+.save-current-section {
   margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px dashed var(--border-color);
+}
+
+.btn-save-current {
+  width: 100%;
+  font-weight: 600;
+  padding: 0.85rem 1.5rem;
+}
+
+.btn-save-current:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 217, 165, 0.35);
+}
+
+.new-trip-section {
+  margin-top: 1.5rem;
   padding-top: 1.5rem;
   border-top: 1px dashed var(--border-color);
 }

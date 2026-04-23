@@ -409,7 +409,7 @@ function App() {
     loadTrips();
   };
 
-  const handleSaveSettings = async () => {
+  const handleSaveSettings = async ({ keepOpen = false } = {}) => {
     try {
       setLoading(true);
       const newSettings = {
@@ -430,11 +430,21 @@ function App() {
       await apiClient.patch('/api/auth/me', {
         credit_card_fee_rate: newSettings.credit_card_fee_rate,
       });
-      await apiClient.put('/api/settings', newSettings);
-      setSettings((prev) => ({ ...prev, ...newSettings }));
-      setShowSettings(false);
+      const putResponse = await apiClient.put('/api/settings', newSettings);
+      const savedSettings = putResponse?.data?.data || newSettings;
+
+      // 저장된 값을 state와 form 모두에 즉시 반영하여 재오픈 시에도 동일한 값이 보이도록 한다.
+      setSettings((prev) => ({ ...prev, ...savedSettings }));
+      setSettingsForm({
+        trip_title: savedSettings.trip_title || '여행 경비 정산',
+        participants: (savedSettings.participants || []).join(', '),
+        categories: (savedSettings.categories || []).join(', '),
+        credit_card_fee_rate: savedSettings.credit_card_fee_rate ?? 2.5,
+      });
+
+      if (!keepOpen) setShowSettings(false);
       showToast('설정이 저장되었습니다!');
-      loadData();
+      await loadData();
     } catch (error) {
       console.error('설정 저장 오류:', error);
       showToast('설정 저장에 실패했습니다.', 'error');
@@ -796,7 +806,9 @@ function App() {
                   <label>결제 수단</label>
                   <select name="payment_method" value={formData.payment_method} onChange={handleInputChange}>
                     <option value="현금">💵 현금</option>
-                    <option value="신용카드">💳 신용카드 (+{settings.credit_card_fee_rate || 2.5}%)</option>
+                    <option value="신용카드">
+                      💳 신용카드{formData.currency === 'KRW' ? '' : ` (+${settings.credit_card_fee_rate || 2.5}%)`}
+                    </option>
                   </select>
                 </div>
                 <div className="form-group">
@@ -1240,7 +1252,7 @@ function App() {
                   </div>
 
                   <div className="form-group">
-                    <label>신용카드 수수료율 (%) — 내 계정</label>
+                    <label>해외결제 신용카드 수수료율 (%) — 내 계정</label>
                     <input
                       type="number"
                       name="credit_card_fee_rate"
@@ -1256,6 +1268,22 @@ function App() {
                     <small className="form-hint" style={{ color: 'orange' }}>
                       ※ 해외 결제의 경우 건별, 결제금액별 수수료가 추가됩니다.
                       카드사마다 서로 달리 적용되니 확인해서 입력하시기 바랍니다.
+                    </small>
+                    <small className="form-hint" style={{ color: 'orange' }}>
+                      ※ 화폐 단위가 <strong>KRW(원)</strong>인 경우에는 이 수수료율이 적용되지 않습니다.
+                    </small>
+                  </div>
+
+                  <div className="save-current-section">
+                    <button
+                      className="btn btn-primary btn-save-current"
+                      onClick={() => handleSaveSettings({ keepOpen: true })}
+                      disabled={loading}
+                    >
+                      {loading ? <div className="loading"></div> : '💾 현재 여행에 저장'}
+                    </button>
+                    <small className="form-hint" style={{ textAlign: 'center', display: 'block', marginTop: '0.5rem' }}>
+                      - 위 수정 사항을 현재 여행에 반영합니다
                     </small>
                   </div>
 
@@ -1328,7 +1356,7 @@ function App() {
                 <button className="btn btn-secondary" onClick={() => setShowSettings(false)}>
                   취소
                 </button>
-                <button className="btn btn-primary" onClick={handleSaveSettings} disabled={loading}>
+                <button className="btn btn-primary" onClick={() => handleSaveSettings()} disabled={loading}>
                   {loading ? <div className="loading"></div> : '저장'}
                 </button>
               </div>

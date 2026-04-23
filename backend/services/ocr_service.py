@@ -214,7 +214,8 @@ def calculate_krw_amount(amount: float, currency: str, payment_method: str,
                          credit_card_fee_rate: float = None) -> tuple:
     """
     원화 환산액을 계산합니다.
-    신용카드 결제 시 지정된 수수료율(%)을 추가합니다.
+    해외 결제(KRW 이외 화폐)를 신용카드로 결제한 경우에 한해 지정된 수수료율(%)을 추가합니다.
+    국내 결제(KRW)는 수수료가 적용되지 않습니다.
     Returns (krw_amount, exchange_rate)
 
     - ``settings``: 트립 settings (환율 조회용).
@@ -235,7 +236,8 @@ def calculate_krw_amount(amount: float, currency: str, payment_method: str,
     exchange_rate = exchange_rates.get(currency, 1.0)
     krw_amount = amount * exchange_rate
 
-    if payment_method == '신용카드':
+    is_foreign_currency = (currency or '').upper() != 'KRW'
+    if payment_method == '신용카드' and is_foreign_currency:
         krw_amount *= (1 + fee_rate_pct / 100.0)
 
     return round(krw_amount), exchange_rate
