@@ -20,7 +20,7 @@ def get_google_api_key() -> str:
 
 def analyze_receipt_with_gemini(image_path: str) -> dict:
     """
-    Gemini 2.5 Flash를 사용하여 영수증을 분석합니다.
+    Gemini 3.8 Flash를 사용하여 영수증을 분석합니다.
     일본어, 한국어, 영어 영수증을 지원합니다.
     """
     logger.info(f"영수증 분석 시작: {image_path}")
@@ -37,7 +37,7 @@ def analyze_receipt_with_gemini(image_path: str) -> dict:
 
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-3.8-flash')
 
         img = Image.open(image_path)
 
